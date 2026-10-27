@@ -17,7 +17,7 @@
       <h1>THE GREAT ESCAPE</h1>
       <p class="sub">…눈을 떴을 때, 문은 이미 잠겨 있었다.</p>
       <div class="menu">
-        <button id="btn-new" class="primary">새 게임</button>
+        <button id="btn-online" class="primary">친구와 플레이</button>
         <button id="btn-continue" hidden>이어하기</button>
         <button id="btn-chars">캐릭터 관리</button>
       </div>
@@ -65,19 +65,57 @@
     </div>
   </section>
 
-  <!-- 멤버 / 에피소드 선택 -->
-  <section id="screen-setup" class="screen">
+  <!-- 방 만들기 / 참가 -->
+  <section id="screen-online" class="screen">
     <header class="bar">
       <button class="back" data-go="title">← 뒤로</button>
-      <h2>출연진 선택</h2>
+      <h2>친구와 플레이</h2>
+    </header>
+    <div class="online-layout">
+      <div class="panel">
+        <h3>1. 참가 방식</h3>
+        <div class="seg">
+          <label><input type="radio" name="role" value="player" checked> 내 캐릭터로 참가</label>
+          <label><input type="radio" name="role" value="gm"> 진행자(GM)로 참가</label>
+        </div>
+        <p id="role-desc" class="muted small"></p>
+        <div id="pick-wrap">
+          <h3>2. 데려갈 캐릭터</h3>
+          <ul id="pick-list" class="char-list pick"></ul>
+          <p id="pick-empty" class="muted" hidden>먼저 <button type="button" data-go="chars">캐릭터 관리</button>에서 캐릭터를 만들어 주세요.</p>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>방 만들기</h3>
+        <label>에피소드 <select id="episode-select"></select></label>
+        <p id="episode-desc" class="muted small"></p>
+        <button id="btn-create" class="primary wide">방 만들기</button>
+        <h3 class="gap">방 참가하기</h3>
+        <label>초대 코드 <input id="join-code" maxlength="4" placeholder="예: K7QX" autocomplete="off"></label>
+        <button id="btn-join" class="wide">참가하기</button>
+        <p id="online-error" class="error" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 대기실 -->
+  <section id="screen-lobby" class="screen">
+    <header class="bar">
+      <button id="btn-leave" class="back">← 나가기</button>
+      <h2>대기실</h2>
     </header>
     <div class="panel narrow">
-      <label>에피소드 <select id="episode-select"></select></label>
-      <p id="episode-desc" class="muted"></p>
-      <h3>멤버 (1~6명)</h3>
-      <ul id="pick-list" class="char-list pick"></ul>
-      <p id="pick-empty" class="muted" hidden>먼저 캐릭터를 만들어 주세요.</p>
-      <button id="btn-start" class="primary wide" disabled>녹화 시작</button>
+      <p class="eyebrow">초대 코드</p>
+      <div class="code-row">
+        <span id="lobby-code" class="room-code"></span>
+        <button id="btn-copy-link">초대 링크 복사</button>
+      </div>
+      <h3 id="lobby-ep"></h3>
+      <p id="lobby-summary" class="muted small"></p>
+      <h3 class="gap">참가자</h3>
+      <ul id="lobby-players" class="char-list"></ul>
+      <button id="btn-lobby-start" class="primary wide" hidden>녹화 시작</button>
+      <p id="lobby-wait" class="muted small center" hidden>방장이 녹화를 시작하기를 기다리는 중…</p>
     </div>
   </section>
 
@@ -97,14 +135,16 @@
         <span id="ep-name" class="ep-name"></span>
       </div>
       <div class="game-tools">
+        <span id="net-status" class="net-status" hidden>연결 끊김…</span>
         <span id="timer" class="timer">30:00</span>
+        <button id="btn-pause" hidden>일시정지</button>
         <button id="btn-hint">힌트 (-3분)</button>
         <button id="btn-quit">나가기</button>
       </div>
     </header>
     <div class="game-layout">
       <aside class="col col-left">
-        <h4>멤버</h4>
+        <h4>출연진</h4>
         <div id="team" class="team"></div>
       </aside>
       <main class="col col-center">
@@ -125,13 +165,7 @@
         <form id="rp-form" class="rp-form">
           <div class="rp-who" id="rp-who"></div>
           <div class="rp-row">
-            <select id="rp-mode">
-              <option value="say">대사</option>
-              <option value="whisper">속삭임</option>
-              <option value="shout">외침</option>
-              <option value="act">행동</option>
-              <option value="narr">나레이션</option>
-            </select>
+            <select id="rp-mode"></select>
             <input id="rp-text" autocomplete="off" placeholder="캐릭터로 말하거나 행동해 보세요">
             <button class="primary">전송</button>
           </div>
@@ -149,7 +183,7 @@
       <div id="ending-team" class="ending-team"></div>
       <div class="menu">
         <button id="btn-save-log" class="primary">역극 로그 저장 (.txt)</button>
-        <button data-go="title">타이틀로</button>
+        <button id="btn-ending-title">타이틀로</button>
       </div>
     </div>
   </section>
@@ -180,7 +214,6 @@
 
   <script src="js/pixels.js"></script>
   <script src="js/voices.js"></script>
-  <script src="js/scenarios.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

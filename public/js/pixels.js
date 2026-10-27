@@ -505,3 +505,5 @@ function spriteSvg(variant, color, size) {
   const palette = { ...PIXEL_PALETTE, H: color, D: shade(color, 0.35), C: shade(color, 0.6) };
   return gridToSvg(rows, palette, size, 'px-sprite');
 }
+
+if (typeof module !== 'undefined') module.exports = { SPRITES };

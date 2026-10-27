@@ -225,3 +225,5 @@ const SCENARIOS = [
     },
   },
 ];
+
+module.exports = SCENARIOS;
