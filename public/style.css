@@ -562,6 +562,35 @@ html.no-fx #fx { display: none; }
 .room-log p.latest { color: var(--text); }
 .room-log p.latest::before { content: "▶"; color: var(--accent); font-size: 10px; margin-top: 3px; }
 
+
+/* ===== 메모장 / 먼저 살펴본 물건 ===== */
+.obj .by { font-size: 10px; color: var(--muted); }
+.obj.taken { opacity: .55; }
+.obj.taken .icon { filter: grayscale(.7) brightness(.8); }
+#btn-memo.on { background: var(--accent-dark); color: var(--accent-hi); }
+.memo {
+  position: fixed; top: 76px; right: 400px; z-index: 95;
+  width: 280px; height: 240px; min-width: 200px; min-height: 140px; resize: both; overflow: hidden;
+  display: flex; flex-direction: column;
+  background: var(--paper); color: var(--ink);
+  box-shadow: 0 0 0 var(--px) var(--ink), 6px 6px 0 var(--px) rgba(0, 0, 0, .6);
+}
+.memo-head {
+  display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 10px; cursor: move; user-select: none; touch-action: none;
+  background: #8f8468; color: var(--ink); font-weight: 700; font-size: 12px;
+}
+.memo-head .muted { color: #4a3d2c; font-weight: 400; font-size: 11px; }
+.memo-head button { margin: 0 0 0 auto; padding: 2px 8px; font-size: 11px; }
+.memo textarea {
+  flex: 1; resize: none; margin: 0; padding: 10px 12px; border: 0; box-shadow: none;
+  background: repeating-linear-gradient(transparent 0 23px, rgba(58, 42, 30, .25) 23px 24px);
+  color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 24px;
+}
+.memo textarea:focus { outline: none; }
+@media (max-width: 860px) {
+  .memo { left: 8px !important; right: 8px !important; top: 92px !important; width: auto; height: 38vh; resize: vertical; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; }
 }

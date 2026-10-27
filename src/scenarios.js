@@ -19,6 +19,7 @@
 //   onSolve     { text, item, unlock, ending }  해결 결과 (unlock: 링크 id)
 //   solvedDesc  해결 후 다시 조사했을 때 설명
 //   cctv        조사하면 모든 멤버의 위치를 알려 준다
+//   shared      true 면 여러 캐릭터가 살펴볼 수 있다 (기본: 단서 물건은 처음 만진 캐릭터만)
 //
 // 자동 이벤트 events: 조건이 맞으면 진행자 없이도 연출이 나온다. 기본은 한 번만, repeat: true 면 반복.
 //   on: 'start'                         게임 시작

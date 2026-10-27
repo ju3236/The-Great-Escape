@@ -32,6 +32,7 @@ function show(name) {
   if (name === 'online') renderOnline();
   if (name === 'game') startClock(); else stopClock();
   Sound.bgm(name === 'game' || name === 'intro');
+  if (name !== 'game') document.querySelector('#memo').hidden = true;
 }
 
 /* ---------------- 설정: 화면 효과 / 소리 ---------------- */
@@ -933,10 +934,17 @@ function renderRoom() {
     ? (others.length ? `이 구역: ${others.join(', ')}` : '아무도 없다')
     : (others.length ? `함께 있는 멤버: ${others.join(', ')}` : '이 구역엔 혼자다');
   $('#room-desc').textContent = r.desc;
-  $('#objects').innerHTML = r.objects.map((o) => `
-    <button class="obj ${o.done ? 'solved' : ''}" data-obj="${o.id}" ${isGM() ? 'disabled' : ''}>
-      <span class="icon">${pix(o.icon, 40)}</span><span>${esc(o.name)}</span>
-    </button>`).join('');
+  $('#objects').innerHTML = r.objects.map((o) => {
+    // 단서 물건은 처음 살펴본 캐릭터만 다시 볼 수 있다
+    const by = o.by ? castById(o.by) : null;
+    const taken = by && !isGM() && o.by !== activeChar;
+    const label = by ? `<small class="by">${esc(josa(by.name, '이', '가'))} 살펴봄${isMine(o.by) ? ' (나)' : ''}</small>` : '';
+    return `
+    <button class="obj ${o.done ? 'solved' : ''} ${taken ? 'taken' : ''}" data-obj="${o.id}" ${isGM() ? 'disabled' : ''}
+      title="${taken ? `${esc(by.name)}에게 무엇을 봤는지 물어보세요` : ''}">
+      <span class="icon">${pix(o.icon, 40)}</span><span>${esc(o.name)}</span>${label}
+    </button>`;
+  }).join('');
   $('#exits').innerHTML = r.exits.map((x) => `
     <button class="exit ${x.open ? '' : 'locked'}" data-room="${x.to}" ${isGM() ? 'disabled' : ''}>
       ${x.open ? '▶' : pix('padlock', 12)} ${esc(x.name || '???')}</button>`).join('');
@@ -1166,6 +1174,9 @@ function buildHtmlLog(art) {
   .av.big { width: 72px; height: 72px; }
   .av.npc { --c: #6e221c; background: #120c0b; }
   footer { margin-top: 40px; color: var(--muted); font-size: 11px; text-align: center; }
+  .memo { margin-top: 28px; background: #b3a682; color: #17120d; padding: 12px 16px; box-shadow: 4px 4px 0 var(--shadow); }
+  .memo h2 { margin: 0 0 6px; font-size: 14px; }
+  .memo pre { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 14px; }
 </style>
 </head>
 <body>
@@ -1179,6 +1190,7 @@ function buildHtmlLog(art) {
   <main class="log">
 ${rows}
   </main>
+  ${memoText().trim() ? `<section class="memo"><h2>내 메모</h2><pre>${esc(memoText())}</pre></section>` : ''}
   <footer>THE GREAT ESCAPE — 자캐 역극 탈출 게임 로그</footer>
 </div>
 </body>
@@ -1291,6 +1303,53 @@ $('#lock-form').addEventListener('submit', (e) => {
 $('#lock-force').addEventListener('click', () => {
   lockDlg.close();
   send({ t: 'force', as: lockObj.as, obj: lockObj.id });
+});
+
+/* ---------------- 메모장 ----------------
+   나만 보는 메모. 방마다 따로 이 기기에 저장한다. 머리 부분을 끌어서 옮긴다. */
+const memoBox = $('#memo');
+const memoKey = () => `tge.memo.${view?.code || 'none'}`;
+function memoText() {
+  try { return localStorage.getItem(memoKey()) || ''; } catch { return ''; }
+}
+function toggleMemo(on = memoBox.hidden) {
+  memoBox.hidden = !on;
+  $('#btn-memo').classList.toggle('on', on);
+  if (!on) return;
+  $('#memo-text').value = memoText();
+  try {
+    const pos = JSON.parse(localStorage.getItem('tge.memo.pos'));
+    if (pos) placeMemo(pos.x, pos.y);
+  } catch { /* 저장 불가 */ }
+  $('#memo-text').focus();
+}
+function placeMemo(x, y) {
+  const r = memoBox.getBoundingClientRect();
+  const nx = Math.max(0, Math.min(window.innerWidth - Math.min(r.width, 120), x));
+  const ny = Math.max(0, Math.min(window.innerHeight - 40, y));
+  Object.assign(memoBox.style, { left: `${nx}px`, top: `${ny}px`, right: 'auto' });
+  return { x: nx, y: ny };
+}
+$('#btn-memo').addEventListener('click', () => toggleMemo());
+$('#memo-close').addEventListener('click', () => toggleMemo(false));
+$('#memo-text').addEventListener('input', (e) => {
+  try { localStorage.setItem(memoKey(), e.target.value); } catch { /* 저장 불가 */ }
+});
+let memoDrag = null;
+$('#memo-head').addEventListener('pointerdown', (e) => {
+  if (e.target.closest('button')) return;
+  const r = memoBox.getBoundingClientRect();
+  memoDrag = { dx: e.clientX - r.left, dy: e.clientY - r.top };
+  e.currentTarget.setPointerCapture(e.pointerId);
+});
+$('#memo-head').addEventListener('pointermove', (e) => {
+  if (memoDrag) placeMemo(e.clientX - memoDrag.dx, e.clientY - memoDrag.dy);
+});
+$('#memo-head').addEventListener('pointerup', (e) => {
+  if (!memoDrag) return;
+  memoDrag = null;
+  const pos = placeMemo(e.clientX - (e.clientX - memoBox.getBoundingClientRect().left), memoBox.getBoundingClientRect().top);
+  try { localStorage.setItem('tge.memo.pos', JSON.stringify(pos)); } catch { /* 저장 불가 */ }
 });
 
 /* ---------------- 모바일: 한 번에 한 칸씩 ---------------- */

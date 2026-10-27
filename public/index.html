@@ -167,6 +167,7 @@
         <span id="timer" class="timer">30:00</span>
         <button id="btn-fx" class="toggle" title="깜빡임·번쩍임 화면 효과">효과 켬</button>
         <button id="btn-sound" class="toggle" title="효과음과 배경음: 누를 때마다 크게 → 작게 → 끔">소리 크게</button>
+        <button id="btn-memo" class="toggle" title="나만 보는 메모장 (이 기기에 저장)">메모</button>
         <button id="btn-pause" hidden>일시정지</button>
         <button id="btn-hint">힌트 (-3분)</button>
         <button id="btn-quit">나가기</button>
@@ -286,6 +287,16 @@
       <div class="row"><button value="cancel">취소</button></div>
     </form>
   </dialog>
+
+  <!-- 메모장: 화면 위에 떠 있고, 끌어서 옮기고 크기를 바꿀 수 있다 -->
+  <section id="memo" class="memo" hidden aria-label="메모장">
+    <header class="memo-head" id="memo-head">
+      <span>메모장</span>
+      <small class="muted">나만 보여요</small>
+      <button type="button" id="memo-close" title="닫기">닫기</button>
+    </header>
+    <textarea id="memo-text" placeholder="단서, 비밀번호, 친구가 알려 준 것을 적어 두세요. 이 기기에만 저장돼요."></textarea>
+  </section>
 
   <div id="fx" aria-hidden="true"></div>
 

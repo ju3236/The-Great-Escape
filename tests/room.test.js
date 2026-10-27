@@ -465,3 +465,33 @@ test('진행자가 시간을 멈추면 타임어택도 멈춘다', () => {
   room.handle(gm, { t: 'pause' });
   assert.ok(Math.abs(room.view(p1).attacks[0].left - left) < 1_000, '다시 흐르면 멈춘 자리부터 센다');
 });
+
+test('단서 물건은 처음 만진 캐릭터만 살펴볼 수 있고, 자물쇠는 여럿이 만질 수 있다', () => {
+  const env = setup(['가', '나']);
+  start(env, ['b', 'b']);
+  const [p1, p2] = env.players;
+  env.room.handle(p1, { t: 'interact', obj: 'box' });
+  env.sock(p2).sent = [];
+  env.room.handle(p2, { t: 'interact', obj: 'box' });
+  assert.ok(env.sock(p2).sent.some((m) => m.t === 'error' && m.text.includes('가가 먼저 살펴본')), '두 번째 사람은 안내만 받는다');
+  assert.equal(env.room.view(p2).rooms.b.objects.find((o) => o.id === 'box').by, p1.id);
+  env.room.handle(p1, { t: 'interact', obj: 'box' });
+  assert.ok(!env.sock(p1).sent.some((m) => m.t === 'error'), '처음 만진 사람은 다시 볼 수 있다');
+  Object.assign(env.room.state.pos, { [p1.id]: 'a', [p2.id]: 'a' });
+  env.room.handle(p1, { t: 'interact', obj: 'lockA' });
+  env.room.handle(p2, { t: 'interact', obj: 'lockA' });
+  assert.ok(env.sock(p2).sent.some((m) => m.t === 'lock'), '자물쇠는 두 번째 사람도 열어 볼 수 있다');
+});
+
+test('조사 결과는 조사한 캐릭터에게만, 같은 방 사람에게는 행동만 보인다', () => {
+  const env = setup(['가', '나']);
+  start(env, ['b', 'b']);
+  const [p1, p2] = env.players;
+  env.room.handle(p1, { t: 'interact', obj: 'box' });
+  const seen = (p) => received(env, p).map((m) => m.text);
+  assert.ok(seen(p1).includes('열쇠'), '조사한 사람은 결과를 본다');
+  assert.ok(!seen(p2).includes('열쇠'), '같은 방 사람에게 결과는 안 간다');
+  assert.ok(seen(p2).includes('상자를 살펴본다.'), '같은 방 사람은 행동은 본다');
+  env.room.handle(p1, { t: 'move', to: 'c' });
+  assert.ok(!seen(p2).includes('C'), '처음 들어간 방 설명도 들어간 사람만 본다');
+});
