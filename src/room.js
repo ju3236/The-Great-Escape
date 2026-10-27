@@ -221,6 +221,7 @@ export class Room {
         s.relocked = s.relocked.filter((id) => id !== act.unlock);
       }
       if (act.lock && !s.relocked.includes(act.lock)) s.relocked.push(act.lock);
+      if (act.release) s.relocked = s.relocked.filter((id) => id !== act.release);
       if (act.time) {
         if (act.time < 0) this.spendTime(-act.time);
         else if (s.paused) s.pausedLeft += act.time * 1000;
@@ -641,7 +642,7 @@ export class Room {
     const here = s.pos[c.id];
     s.solved.push(obj.id);
     s.lastProgress = Date.now();
-    if (obj.needItem) s.inv[c.id] = s.inv[c.id].filter((i) => i !== obj.needItem);
+    if (obj.needItem && !obj.keepItem) s.inv[c.id] = s.inv[c.id].filter((i) => i !== obj.needItem);
     this.post({ type: 'narr', text: r.text, room: here });
     if (r.unlock && !s.unlocked.includes(r.unlock)) s.unlocked.push(r.unlock);
     if (r.item) {

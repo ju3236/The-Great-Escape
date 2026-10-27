@@ -13,7 +13,7 @@
 // 오브젝트 필드
 //   desc        조사했을 때 나오는 설명
 //   bonus       '관찰력' 특기 멤버가 조사하면 추가로 보이는 단서
-//   needItem    조사하는 멤버가 갖고 있어야 하는 아이템 id
+//   needItem    조사하는 멤버가 갖고 있어야 하는 아이템 id (쓰면 없어진다. keepItem: true 면 남는다)
 //   needAll     모든 멤버가 이 구역에 모여 있어야 함
 //   lock        { answer, prompt, hint, forceable }  정답 입력 퍼즐
 //   onSolve     { text, item, unlock, ending }  해결 결과 (unlock: 링크 id)
@@ -33,7 +33,9 @@
 //   do: 연출 목록. to: 'here'(조건이 일어난 구역, 기본) / 'all'(전체) / 구역 id
 //       { narr: '나레이션' }  { sys: '알림' }  { voice: '대사', speaker: '천장 스피커' }
 //       { effect: 'flicker' | 'blackout' | 'alarm' }  화면 효과
-//       { unlock: 링크 id }  { lock: 링크 id }  { time: +60 | -60 }  { hint: true | '머리말' }
+//       { unlock: 링크 id }  문을 연다
+//       { lock: 링크 id }    문을 강제로 잠근다 → { release: 링크 id } 로 원래 상태로 돌린다 (순찰 연출 등)
+//       { time: +60 | -60 }  { hint: true | '머리말' }
 //   문구 안의 {name} 은 조건을 일으킨 캐릭터 이름, {room} 은 그 구역 이름으로 바뀐다.
 export const SCENARIOS = [
   {
@@ -502,6 +504,460 @@ export const SCENARIOS = [
       {
         id: 'idle', on: 'idle', seconds: 300, repeat: true,
         do: [{ voice: '…언니야, 막혔어? 내가 알려 줄게.', speaker: '아이 목소리', to: 'all' }, { hint: '자동 힌트' }],
+      },
+    ],
+  },
+  {
+    id: 'prison',
+    title: '제3화 · 청운교도소',
+    summary: '누명을 쓰고 독방에 갇힌 멤버들. 간수의 순찰을 피해 동이 트기 전에 담장을 넘어라.',
+    timeLimit: 30 * 60,
+    failText: '사이렌이 울리고 서치라이트가 멤버들을 비췄다. 탈옥 실패…',
+    map: { w: 12, h: 9 },
+    starts: ['cell1', 'cell2', 'cell3'],
+    intro: [
+      '철컥. 쇠문 잠기는 소리에 눈을 뜬다.',
+      '회색 죄수복. 가슴팍에 낯선 수번. 기억나는 건, 하지 않은 일로 끌려왔다는 것뿐이다.',
+      '벽 너머 옆 감방에서도 누군가 뒤척이는 소리가 난다.',
+      '"…소등. 동트기 전까지 아무도 움직이지 마라."',
+    ],
+    items: {
+      spoon: { name: '날카로운 숟가락', icon: 'spoon' },
+      cellkey: { name: '감방 열쇠 꾸러미', icon: 'key' },
+      gatecard: { name: '운동장 출입 카드', icon: 'card' },
+    },
+    hints: [
+      { until: 'd1', text: '1번 감방 — 변기 물통 안을 살펴보자. 숟가락으로 환풍구 나사를 풀 수 있다.' },
+      { until: 'd2', text: '2번 감방 — 편지대로 죄수복 수번을 거꾸로.' },
+      { until: 'd3', text: '3번 감방 — 벽의 선은 다섯 개씩 여섯 묶음, 그리고 셋.' },
+      { until: 'dG', text: '간수실 비밀번호는 식당 메뉴판에 있다.' },
+      { until: 'keyrack', text: '간수실 열쇠 보관함에서 감방 열쇠를 챙기자. 남은 동료를 꺼낼 수 있다.' },
+      { until: 'basket', text: '근무 일지에 운동장 카드 위치가 적혀 있다. 세탁실 빨래 바구니.' },
+      { until: 'dY', text: '운동장 출입 카드로 복도 끝 철문을 연다.' },
+      { until: 'wallgate', text: '모두 운동장에 모인 뒤 담장 쪽문으로.' },
+    ],
+    links: [
+      { id: 'w12', a: 'cell1', b: 'cell2', kind: 'wall' },
+      { id: 'w23', a: 'cell2', b: 'cell3', kind: 'wall' },
+      { id: 'w3g', a: 'cell3', b: 'guard', kind: 'wall' },
+      { id: 'd1', a: 'cell1', b: 'block', kind: 'door', locked: true },
+      { id: 'd2', a: 'cell2', b: 'block', kind: 'door', locked: true },
+      { id: 'd3', a: 'cell3', b: 'block', kind: 'door', locked: true },
+      { id: 'dG', a: 'guard', b: 'block', kind: 'door', locked: true },
+      { id: 'dM', a: 'block', b: 'mess', kind: 'open' },
+      { id: 'dL', a: 'mess', b: 'laundry', kind: 'open' },
+      { id: 'dY', a: 'block', b: 'yard', kind: 'door', locked: true },
+      { id: 'wMY', a: 'mess', b: 'yard', kind: 'wall' },
+    ],
+    rooms: {
+      cell1: {
+        name: '1번 감방', rect: [0, 0, 3, 3],
+        desc: '좁은 독방. 녹슨 변기와 철제 침상, 천장 가까이 환풍구가 있다.',
+        objects: [
+          {
+            id: 'bunk1', name: '철제 침상', icon: 'bed',
+            desc: '침상 다리에 누군가 새겨 놓았다: "나는 안 했어."',
+            bonus: '침상 아래 벽돌 하나가 헐겁다. 뒤는 비어 있다… 누가 먼저 가져갔다.',
+          },
+          {
+            id: 'toilet1', name: '녹슨 변기', icon: 'toilet',
+            desc: '변기 물통 뚜껑이 살짝 어긋나 있다.',
+            onSolve: { text: '물통 안에서 끝을 날카롭게 간 숟가락이 나왔다.', item: 'spoon' },
+            solvedDesc: '물통 안은 이제 비어 있다.',
+          },
+          {
+            id: 'vent1', name: '환풍구 덮개', icon: 'plank',
+            desc: '나사 네 개로 고정된 환풍구 덮개. 복도 쪽으로 이어져 있다.',
+            needItem: 'spoon', lackText: '맨손으로는 나사를 풀 수 없다.',
+            onSolve: { text: '숟가락 끝으로 나사를 풀어내자 덮개가 떨어진다. 기어서 복도로 나갈 수 있다.', unlock: 'd1' },
+            solvedDesc: '덮개가 떨어진 환풍구. 복도로 이어진다.',
+          },
+        ],
+      },
+      cell2: {
+        name: '2번 감방', rect: [3, 0, 3, 3],
+        desc: '벽 한쪽에 사진과 편지가 붙어 있는 감방.',
+        objects: [
+          {
+            id: 'letter', name: '벽에 붙은 편지', icon: 'note',
+            desc: '"형, 걱정 마. 형 방 자물쇠는 형 수번을 거꾸로 하면 열려. — 간수 조카가"',
+            bonus: '편지 뒷면: "간수실 근무 일지를 꼭 봐."',
+          },
+          { id: 'uniform2', name: '죄수복', icon: 'clipboard', desc: '가슴팍에 수번이 박혀 있다: 4127.' },
+          {
+            id: 'lock2', name: '감방 자물쇠', icon: 'padlock',
+            desc: '창살 사이로 손을 뻗으면 닿는 4자리 자물쇠.',
+            lock: { answer: '7214', prompt: '4자리 숫자를 입력하세요.', hint: '수번을 거꾸로.', forceable: true },
+            onSolve: { text: '자물쇠가 툭 풀리고 감방 문이 열린다.', unlock: 'd2' },
+            solvedDesc: '풀린 자물쇠가 바닥에 떨어져 있다.',
+          },
+        ],
+      },
+      cell3: {
+        name: '3번 감방', rect: [6, 0, 3, 3],
+        desc: '창살 너머로 간수실 불빛이 새어 들어오는 감방. 벽에 날짜를 센 선이 가득하다.',
+        objects: [
+          {
+            id: 'tally3', name: '날짜 센 선', icon: 'graffiti',
+            desc: '다섯 개씩 묶은 선이 여섯 묶음, 그리고 세 줄 더.',
+            bonus: '맨 마지막 줄 옆에 작게: "자물쇠 번호 = 내가 여기 있은 날".',
+          },
+          {
+            id: 'peek', name: '간수실 쪽 창살', icon: 'mirror',
+            desc: '창살 틈으로 간수실이 보인다. 벽에 열쇠 꾸러미가 걸려 있다.',
+          },
+          {
+            id: 'lock3', name: '다이얼 자물쇠', icon: 'padlock',
+            desc: '2자리 다이얼 자물쇠.',
+            lock: { answer: '33', prompt: '2자리 숫자를 입력하세요.', hint: '벽의 선을 세어 보자.', forceable: true },
+            onSolve: { text: '다이얼이 맞물리고 감방 문이 열린다.', unlock: 'd3' },
+            solvedDesc: '열린 자물쇠.',
+          },
+        ],
+      },
+      guard: {
+        name: '간수실', rect: [9, 0, 3, 3],
+        desc: '모니터와 서류철이 놓인 간수실. 식은 커피에서 아직 김이 오른다.',
+        objects: [
+          {
+            id: 'keyrack', name: '열쇠 보관함', icon: 'keybox',
+            desc: '벽에 걸린 열쇠 보관함.',
+            onSolve: { text: '"감방" 이름표가 붙은 열쇠 꾸러미를 챙겼다.', item: 'cellkey' },
+            solvedDesc: '비어 있는 열쇠 고리.',
+          },
+          { id: 'guardcctv', name: 'CCTV 모니터', icon: 'monitor', desc: '교도소 곳곳이 흑백 화면에 비친다.', cctv: true },
+          {
+            id: 'logbook', name: '근무 일지', icon: 'book',
+            desc: '"운동장 철문 카드는 세탁실 빨래 바구니에 숨겨 둠. 소장님께 들키지 말 것. — 박 간수"',
+            bonus: '그 아래 다른 글씨: "세 사람 다 누명이다. 내가 증거를 숨겨 뒀다."',
+          },
+        ],
+      },
+      block: {
+        name: '수감동 복도', rect: [0, 3, 12, 2],
+        desc: '감방 문이 늘어선 어두운 복도. 문마다 굵은 자물쇠가 걸려 있다.',
+        objects: [
+          {
+            id: 'out1', name: '1번 감방 문', icon: 'door', desc: '굵은 자물쇠가 걸린 1번 감방 문.',
+            needItem: 'cellkey', keepItem: true, lackText: '감방 열쇠가 필요하다.',
+            onSolve: { text: '열쇠가 맞물리고 1번 감방 문이 열린다.', unlock: 'd1' },
+          },
+          {
+            id: 'out2', name: '2번 감방 문', icon: 'door', desc: '굵은 자물쇠가 걸린 2번 감방 문.',
+            needItem: 'cellkey', keepItem: true, lackText: '감방 열쇠가 필요하다.',
+            onSolve: { text: '열쇠가 맞물리고 2번 감방 문이 열린다.', unlock: 'd2' },
+          },
+          {
+            id: 'out3', name: '3번 감방 문', icon: 'door', desc: '굵은 자물쇠가 걸린 3번 감방 문.',
+            needItem: 'cellkey', keepItem: true, lackText: '감방 열쇠가 필요하다.',
+            onSolve: { text: '열쇠가 맞물리고 3번 감방 문이 열린다.', unlock: 'd3' },
+          },
+          {
+            id: 'guardLock', name: '간수실 도어락', icon: 'doorlock',
+            desc: '간수실 문에 달린 4자리 도어락.',
+            lock: { answer: '0912', prompt: '4자리 비밀번호를 입력하세요.', hint: '식당 메뉴판을 보자.' },
+            onSolve: { text: '띠리릭— 간수실 문이 열렸다.', unlock: 'dG' },
+          },
+          {
+            id: 'yardDoor', name: '운동장 철문', icon: 'doorlock',
+            desc: '카드 리더기가 달린 운동장 철문.',
+            needItem: 'gatecard', lackText: '카드 리더기가 붉게 빛난다. 운동장 출입 카드가 필요하다.',
+            onSolve: { text: '삑— 운동장 철문이 열린다. 차가운 밤공기가 들이친다.', unlock: 'dY' },
+          },
+        ],
+      },
+      mess: {
+        name: '식당', rect: [4, 5, 4, 4],
+        desc: '긴 식탁이 늘어선 식당. 배식구 너머 주방은 어둡다.',
+        objects: [
+          {
+            id: 'menu', name: '메뉴판', icon: 'board',
+            desc: '"오늘의 식단 번호" 칸에 0, 9, 1, 2. 그 아래 누군가 볼펜으로 "간수실 비번이랑 같음 ㅋㅋ".',
+          },
+          { id: 'radio', name: '낡은 라디오', icon: 'speaker', desc: '주파수가 맞지 않는 라디오. 손잡이를 돌려 본다.' },
+          { id: 'tray', name: '식판 더미', icon: 'note', desc: '식판 하나 뒷면에 칼자국으로: "세탁실 → 바구니".' },
+        ],
+      },
+      laundry: {
+        name: '세탁실', rect: [0, 5, 4, 4],
+        desc: '거대한 세탁기들이 웅웅거리는 세탁실. 축축한 빨래 냄새가 가득하다.',
+        objects: [
+          {
+            id: 'basket', name: '빨래 바구니', icon: 'cabinet',
+            desc: '죄수복이 산더미처럼 쌓인 바구니.',
+            onSolve: { text: '빨래 더미 맨 아래에서 운동장 출입 카드를 찾았다.', item: 'gatecard' },
+            solvedDesc: '헤집어 놓은 빨래 더미.',
+          },
+          { id: 'washer', name: '세탁기', icon: 'safe', desc: '세탁기 하나가 덜컹거리며 혼자 돌아간다. 안에 붉게 물든 옷이 보인다.' },
+        ],
+      },
+      yard: {
+        name: '운동장', rect: [8, 5, 4, 4],
+        desc: '서치라이트가 훑고 지나가는 운동장. 담장 한쪽에 작은 쪽문이 있다.',
+        objects: [
+          {
+            id: 'wallgate', name: '담장 쪽문', icon: 'exit',
+            desc: '녹슨 쪽문. 서치라이트가 지나간 직후에만 빠져나갈 수 있다.',
+            needAll: true,
+            onSolve: { text: '서치라이트가 비켜 가는 순간, 모두 함께 쪽문을 빠져나간다. 담장 너머 새벽 공기가 차갑다.', ending: 'escape' },
+          },
+        ],
+      },
+    },
+    events: [
+      { id: 'start-pa', on: 'start', do: [{ voice: '소등. 전원 취침. 순찰은 수시로 돈다.', speaker: '교도소 방송', to: 'all' }] },
+      { id: 'radio', on: 'inspect', obj: 'radio', do: [{ voice: '…속보입니다. 청운교도소 수감자 세 명에 대한 누명 의혹이… 지지직…', speaker: '라디오' }] },
+      {
+        id: 'block-first', on: 'enter', room: 'block',
+        do: [{ effect: 'flicker' }, { narr: '복도 끝 간수실 문틈으로 불빛이 새어 나온다. 아무도 없는 것 같다… 지금은.' }],
+      },
+      {
+        id: 'patrol1', on: 'time', left: 1200,
+        do: [
+          { voice: '점호 준비. 순찰 돈다.', speaker: '간수', to: 'all' },
+          { effect: 'flicker', to: 'all' },
+          { lock: 'dG' },
+          { narr: '군홧발 소리가 복도를 따라 다가온다. 간수실 문이 철컥 잠긴다.', to: 'block' },
+        ],
+      },
+      { id: 'patrol1-end', on: 'time', left: 1080, do: [{ release: 'dG' }, { narr: '발소리가 멀어졌다. 간수실 문 잠금이 풀리는 소리가 난다.', to: 'block' }] },
+      {
+        id: 'patrol2', on: 'time', left: 540,
+        do: [
+          { voice: '운동장 서치라이트 점검. 출입 통제.', speaker: '간수', to: 'all' },
+          { lock: 'dY' },
+          { narr: '운동장 쪽 철문에 빗장 걸리는 소리가 난다.', to: 'block' },
+        ],
+      },
+      { id: 'patrol2-end', on: 'time', left: 420, do: [{ release: 'dY' }, { narr: '운동장 철문의 빗장이 다시 풀렸다.', to: 'block' }] },
+      {
+        id: 'yard-first', on: 'enter', room: 'yard',
+        do: [{ effect: 'flicker' }, { narr: '서치라이트가 {name}의 발끝을 스치고 지나간다. 숨을 멈췄다.' }],
+      },
+      { id: 'reunion', on: 'together', count: 'all', do: [{ narr: '모두 모였다. 이제 담장만 넘으면 된다.' }] },
+      { id: 't3', on: 'time', left: 180, do: [{ effect: 'alarm', to: 'all' }, { voice: '탈옥수 발생! 전 구역 봉쇄 준비!', speaker: '교도소 방송', to: 'all' }] },
+      {
+        id: 'idle', on: 'idle', seconds: 300, repeat: true,
+        do: [{ voice: '…이봐, 신입. 힌트 하나 줄까?', speaker: '옆방 죄수', to: 'all' }, { hint: '자동 힌트' }],
+      },
+    ],
+  },
+  {
+    id: 'school',
+    title: '제4화 · 한빛중학교 구관',
+    summary: '방과 후 아무도 쓰지 않는 구관에서 눈을 뜬 멤버들. 하교 종이 울리기 전에 현관으로 나가야 한다. 20년 전, 이 학교에서 사라진 아이가 있다.',
+    timeLimit: 30 * 60,
+    failText: '종이 울렸다. 구관의 문이 모두 잠겼다. 아무도 하교하지 못했다…',
+    map: { w: 12, h: 9 },
+    starts: ['classA', 'music', 'science'],
+    intro: [
+      '딩— 동— 댕— 동—',
+      '낡은 스피커에서 일그러진 종소리가 울린다. 책상에 엎드려 있던 멤버들이 고개를 든다.',
+      '창밖은 이미 해가 졌다. 복도 쪽에서 실내화 끄는 소리가 났다가 멈춘다.',
+      '"…하교 시간입니다. 아직 남아 있는 학생은 없겠지요?"',
+    ],
+    items: {
+      roomkey: { name: '교실 열쇠', icon: 'key' },
+      battery: { name: '건전지', icon: 'fuse' },
+      bkey: { name: '방송실 열쇠', icon: 'key' },
+      gatekey: { name: '현관 열쇠', icon: 'key' },
+    },
+    hints: [
+      { until: 'dA', text: '2학년 3반 — 칠판의 주번 번호로 사물함을 연다.' },
+      { until: 'dM', text: '음악실 — 악보의 계이름을 계이름 표 숫자로.' },
+      { until: 'dS', text: '과학실 — 산소 8, 나트륨 11.' },
+      { until: 'dLib', text: '복도 진열장 사진의 연도가 도서실 비밀번호.' },
+      { until: 'libdesk', text: '도서실 사서 책상 서랍을 열어 보자.' },
+      { until: 'dB', text: '방송실 열쇠로 방송실 문을 연다.' },
+      { until: 'console', text: '과학실 약품장의 건전지를 방송 콘솔에.' },
+      { until: 'dF', text: '현관 열쇠로 중앙 현관 문을 연다.' },
+      { until: 'exitdoor', text: '모두 중앙 현관에 모인 뒤 밖으로.' },
+    ],
+    links: [
+      { id: 'wAM', a: 'classA', b: 'music', kind: 'wall' },
+      { id: 'wMS', a: 'music', b: 'science', kind: 'wall' },
+      { id: 'dA', a: 'classA', b: 'hall', kind: 'door', locked: true },
+      { id: 'dM', a: 'music', b: 'hall', kind: 'door', locked: true },
+      { id: 'dS', a: 'science', b: 'hall', kind: 'door', locked: true },
+      { id: 'dLib', a: 'hall', b: 'library', kind: 'door', locked: true },
+      { id: 'dB', a: 'hall', b: 'broadcast', kind: 'door', locked: true },
+      { id: 'dF', a: 'hall', b: 'gate', kind: 'door', locked: true },
+      { id: 'wLB', a: 'library', b: 'broadcast', kind: 'wall' },
+      { id: 'wBG', a: 'broadcast', b: 'gate', kind: 'wall' },
+    ],
+    rooms: {
+      classA: {
+        name: '2학년 3반', rect: [0, 0, 4, 4],
+        desc: '책걸상이 반듯하게 놓인 교실. 칠판에 분필 글씨가 남아 있다.',
+        objects: [
+          { id: 'boardA', name: '칠판', icon: 'board', desc: '칠판 구석: "오늘의 주번 — 17번 윤하람". 날짜는 20년 전이다.' },
+          {
+            id: 'deskA', name: '맨 뒷자리 책상', icon: 'note',
+            desc: '책상 안쪽에 연필로: "내 번호로 사물함을 열어 줘. 거기 열쇠 있어."',
+            bonus: '책상 위에 칼로 새긴 글씨: "아무도 날 안 찾아."',
+          },
+          {
+            id: 'lockerA', name: '교실 사물함', icon: 'cabinet',
+            desc: '2자리 번호 자물쇠가 달린 사물함.',
+            lock: { answer: '17', prompt: '2자리 숫자를 입력하세요.', hint: '칠판의 주번 번호.', forceable: true },
+            onSolve: { text: '사물함 안에 교실 열쇠와 낡은 실내화 한 짝.', item: 'roomkey' },
+            solvedDesc: '실내화 한 짝만 남은 사물함.',
+          },
+          {
+            id: 'doorA', name: '교실 앞문', icon: 'door',
+            desc: '잠긴 미닫이 앞문.',
+            needItem: 'roomkey', lackText: '앞문이 잠겨 있다. 교실 열쇠가 필요하다.',
+            onSolve: { text: '열쇠를 돌리자 드르륵, 앞문이 열린다.', unlock: 'dA' },
+            solvedDesc: '열린 앞문. 복도로 이어진다.',
+          },
+        ],
+      },
+      music: {
+        name: '음악실', rect: [4, 0, 4, 4],
+        desc: '먼지 쌓인 피아노가 놓인 음악실. 벽에 계이름 표가 붙어 있다.',
+        objects: [
+          { id: 'piano', name: '피아노', icon: 'piano', desc: '보면대에 악보 한 장: 솔 · 미 · 도 · 레.' },
+          { id: 'solfege', name: '계이름 표', icon: 'note', desc: '도 1 / 레 2 / 미 3 / 파 4 / 솔 5 / 라 6 / 시 7' },
+          {
+            id: 'doorM', name: '음악실 번호키', icon: 'doorlock',
+            desc: '4자리 번호키가 달린 문.',
+            lock: { answer: '5312', prompt: '4자리 숫자를 입력하세요.', hint: '악보의 계이름을 숫자로.' },
+            onSolve: { text: '삑삑삑— 음악실 문이 열렸다.', unlock: 'dM' },
+            solvedDesc: '열린 문. 복도로 이어진다.',
+          },
+        ],
+      },
+      science: {
+        name: '과학실', rect: [8, 0, 4, 4],
+        desc: '약품 냄새가 배어 있는 과학실. 구석에 인체 모형이 서 있다.',
+        objects: [
+          { id: 'skeleton', name: '인체 모형', icon: 'skull', desc: '반쪽은 뼈, 반쪽은 근육이 드러난 모형.' },
+          {
+            id: 'periodic', name: '주기율표', icon: 'board',
+            desc: '주기율표. 산소(O)와 나트륨(Na)에만 빨간 동그라미.',
+            bonus: '동그라미 옆에 작게: "원자번호를 두 자리씩".',
+          },
+          {
+            id: 'chemcab', name: '약품장', icon: 'cabinet',
+            desc: '유리문 약품장. 맨 아래 칸에 건전지 한 묶음이 보인다.',
+            onSolve: { text: '약품장에서 새 건전지를 챙겼다.', item: 'battery' },
+            solvedDesc: '건전지가 빠진 약품장.',
+          },
+          {
+            id: 'doorS', name: '과학실 문', icon: 'doorlock',
+            desc: '4자리 도어락이 달린 문.',
+            lock: { answer: '0811', prompt: '4자리 숫자를 입력하세요.', hint: '산소와 나트륨의 원자번호.', forceable: true },
+            onSolve: { text: '철컥— 과학실 문이 열렸다.', unlock: 'dS' },
+            solvedDesc: '열린 문. 복도로 이어진다.',
+          },
+        ],
+      },
+      hall: {
+        name: '구관 복도', rect: [0, 4, 12, 2],
+        desc: '삐걱거리는 나무 복도. 창밖은 이미 어둑하다. 교실 문마다 바깥 걸쇠가 걸려 있다.',
+        objects: [
+          {
+            id: 'latchA', name: '2학년 3반 걸쇠', icon: 'plank', desc: '2학년 3반 앞문 바깥 걸쇠.',
+            onSolve: { text: '걸쇠를 젖히자 2학년 3반 앞문이 열린다.', unlock: 'dA' },
+          },
+          {
+            id: 'latchM', name: '음악실 걸쇠', icon: 'plank', desc: '음악실 문 바깥 걸쇠.',
+            onSolve: { text: '걸쇠를 젖히자 음악실 문이 열린다.', unlock: 'dM' },
+          },
+          {
+            id: 'latchS', name: '과학실 걸쇠', icon: 'plank', desc: '과학실 문 바깥 걸쇠.',
+            onSolve: { text: '걸쇠를 젖히자 과학실 문이 열린다.', unlock: 'dS' },
+          },
+          {
+            id: 'trophy', name: '트로피 진열장', icon: 'frame',
+            desc: '합창대회 사진들. "2006년 금상 — 지휘 윤하람". 사진 속 그 아이만 얼굴이 흐릿하다.',
+          },
+          {
+            id: 'libDoor', name: '도서실 문', icon: 'doorlock',
+            desc: '4자리 번호키가 달린 도서실 문.',
+            lock: { answer: '2006', prompt: '4자리 숫자를 입력하세요.', hint: '진열장 사진의 연도.' },
+            onSolve: { text: '도서실 문이 끼익 열린다.', unlock: 'dLib' },
+          },
+          {
+            id: 'bcDoor', name: '방송실 문', icon: 'door',
+            desc: '"방송실 — 관계자 외 출입 금지".',
+            needItem: 'bkey', lackText: '방송실 열쇠가 필요하다.',
+            onSolve: { text: '열쇠가 돌아가고 방송실 문이 열린다.', unlock: 'dB' },
+          },
+          {
+            id: 'frontDoor', name: '중앙 현관 문', icon: 'exit',
+            desc: '쇠사슬이 감긴 중앙 현관 쪽 문.',
+            needItem: 'gatekey', lackText: '쇠사슬에 자물쇠가 채워져 있다. 현관 열쇠가 필요하다.',
+            onSolve: { text: '자물쇠가 풀리고 쇠사슬이 바닥으로 흘러내린다.', unlock: 'dF' },
+          },
+        ],
+      },
+      library: {
+        name: '도서실', rect: [0, 6, 4, 3],
+        desc: '책장 사이로 먼지가 내려앉은 도서실.',
+        objects: [
+          { id: 'loancard', name: '대출 카드', icon: 'clipboard', desc: '"마지막 대출자: 2학년 3반 윤하람 — 「집으로 가는 길」 — 미반납".' },
+          {
+            id: 'libdesk', name: '사서 책상', icon: 'cabinet',
+            desc: '서랍이 여러 칸 달린 사서 책상.',
+            onSolve: { text: '서랍 안에 "방송실" 이름표가 달린 열쇠가 있다.', item: 'bkey' },
+            solvedDesc: '열어 둔 서랍.',
+          },
+          { id: 'shelf', name: '책장', icon: 'book', desc: '「집으로 가는 길」 자리만 비어 있다.' },
+        ],
+      },
+      broadcast: {
+        name: '방송실', rect: [4, 6, 4, 3],
+        desc: '낡은 방송 장비가 가득한 방송실. 마이크의 빨간 불은 꺼져 있다.',
+        objects: [
+          {
+            id: 'console', name: '방송 콘솔', icon: 'keypad',
+            desc: '버튼이 잔뜩 달린 방송 콘솔. 전원이 꺼져 있다.',
+            needItem: 'battery', lackText: '전원이 들어오지 않는다. 건전지가 필요하다.',
+            onSolve: { text: '건전지를 끼우자 콘솔에 불이 들어온다. 서랍이 툭 열리며 현관 열쇠가 보인다.', item: 'gatekey' },
+            solvedDesc: '불이 들어온 콘솔. 마이크가 켜져 있다.',
+          },
+          { id: 'mic', name: '마이크', icon: 'speaker', desc: '마이크 앞에 「집으로 가는 길」이 펼쳐져 있다. 마지막 장에 "같이 가고 싶어".' },
+        ],
+      },
+      gate: {
+        name: '중앙 현관', rect: [8, 6, 4, 3],
+        desc: '유리문 너머로 어두운 운동장이 보이는 중앙 현관.',
+        objects: [
+          {
+            id: 'exitdoor', name: '현관 밖으로', icon: 'exit',
+            desc: '유리문을 밀면 운동장이다.',
+            needAll: true,
+            onSolve: { text: '현관문을 밀고 다 같이 밖으로 나선다. 뒤를 돌아보니 2층 창가에서 작은 그림자가 손을 흔들고 있다.', ending: 'escape' },
+          },
+        ],
+      },
+    },
+    events: [
+      { id: 'start-pa', on: 'start', do: [{ voice: '딩동댕동— 하교 시간입니다. 아직 학교에 남아 있는 학생은… 없겠지요?', speaker: '교내 방송', to: 'all' }] },
+      { id: 'piano', on: 'inspect', obj: 'piano', do: [{ effect: 'flicker' }, { narr: '손대지도 않았는데 건반 하나가 저절로 눌린다. 솔—.' }] },
+      { id: 'skeleton', on: 'inspect', obj: 'skeleton', do: [{ narr: '모형의 고개가 {name} 쪽으로 돌아가 있다. 방금 전까지는 정면을 보고 있었다.' }] },
+      {
+        id: 'hall-first', on: 'enter', room: 'hall',
+        do: [{ effect: 'flicker' }, { narr: '복도 끝에서 실내화 끄는 소리가 들린다. 탁, 탁, 탁. 그리고 멈춘다.' }],
+      },
+      { id: 'library-first', on: 'enter', room: 'library', do: [{ narr: '책장 꼭대기에서 책 한 권이 떨어진다. 펼쳐진 페이지에 연필 글씨: "같이 가자."' }] },
+      {
+        id: 'console-on', on: 'solve', obj: 'console',
+        do: [{ effect: 'flicker', to: 'all' }, { voice: '…다들 집에 가는구나. 나도… 데려가 줘.', speaker: '교내 방송', to: 'all' }],
+      },
+      { id: 'reunion', on: 'together', count: 'all', do: [{ narr: '모두 모였다. 누군가 한 명 더 있는 것 같은 기분이 든다. 세어 보면 맞는데.' }] },
+      {
+        id: 't10', on: 'time', left: 600,
+        do: [{ voice: '하교 10분 전입니다. 곧 교실 문을 잠급니다.', speaker: '교내 방송', to: 'all' }, { effect: 'alarm', to: 'all' }],
+      },
+      {
+        id: 't3', on: 'time', left: 180,
+        do: [{ effect: 'blackout', to: 'all' }, { narr: '구관 전체의 불이 꺼졌다. 어둠 속에서 누군가 출석을 부르기 시작한다. "…17번, 윤하람."', to: 'all' }],
+      },
+      {
+        id: 'idle', on: 'idle', seconds: 300, repeat: true,
+        do: [{ voice: '…언니, 오빠. 여기 봐. 내가 알려 줄게.', speaker: '아이 목소리', to: 'all' }, { hint: '자동 힌트' }],
       },
     ],
   },
