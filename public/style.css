@@ -430,6 +430,29 @@ dialog h3 { color: var(--text); font-size: 15px; display: flex; align-items: cen
 .item.static { display: inline-flex; align-items: center; gap: 4px; background: var(--shadow); color: var(--text-dim); }
 .member { cursor: default; }
 
+
+/* ===== 자동 연출 ===== */
+.msg.npc { display: flex; gap: 8px; }
+.msg.npc b { font-family: var(--font); font-size: 12px; color: var(--danger); }
+.msg.npc p {
+  margin: 4px 0 0; padding: 6px 10px; color: #cbb9a6; font-style: italic;
+  background: repeating-linear-gradient(0deg, #1c1513 0 2px, #181211 2px 4px);
+  box-shadow: 0 0 0 2px var(--blood), 3px 3px 0 2px var(--shadow);
+}
+.avatar.npc { --c: #6e221c; background: #120c0b; }
+#fx { position: fixed; inset: 0; pointer-events: none; z-index: 98; opacity: 0; }
+#fx.fx-flicker { background: #000; animation: fx-flicker 1.6s steps(1) forwards; }
+#fx.fx-blackout { background: #000; animation: fx-blackout 3.5s ease-in forwards; }
+#fx.fx-alarm { background: radial-gradient(ellipse at center, rgba(163, 54, 43, .15), rgba(163, 54, 43, .55)); animation: fx-alarm 3s steps(1) forwards; }
+@keyframes fx-flicker {
+  0% { opacity: .85; } 8% { opacity: 0; } 14% { opacity: .7; } 20% { opacity: .1; }
+  32% { opacity: .9; } 40% { opacity: 0; } 70% { opacity: .5; } 76% { opacity: 0; } 100% { opacity: 0; }
+}
+@keyframes fx-blackout { 0% { opacity: .97; } 70% { opacity: .95; } 100% { opacity: 0; } }
+@keyframes fx-alarm {
+  0% { opacity: 1; } 16% { opacity: 0; } 33% { opacity: 1; } 50% { opacity: 0; } 66% { opacity: 1; } 83% { opacity: 0; } 100% { opacity: 0; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; }
 }

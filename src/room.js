@@ -91,7 +91,7 @@ export class Room {
     room.hostToken = snap.hostToken;
     room.phase = snap.phase;
     room.lastActive = snap.lastActive;
-    if (snap.state) room.state = { ...snap.state, log };
+    if (snap.state) room.state = { relocked: [], fired: [], lastProgress: Date.now(), ...snap.state, log };
     return room;
   }
   takeUnsaved() {
@@ -127,7 +127,10 @@ export class Room {
   charOf(player) { return this.state && this.cast.find((c) => c.id === player.id); }
   linksOf(roomId) { return this.scenario.links.filter((l) => l.a === roomId || l.b === roomId); }
   other(l, roomId) { return l.a === roomId ? l.b : l.a; }
-  linkOpen(l) { return l.kind === 'open' || (l.kind === 'door' && (!l.locked || this.state.unlocked.includes(l.id))); }
+  linkOpen(l) {
+    if (this.state.relocked?.includes(l.id)) return false;
+    return l.kind === 'open' || (l.kind === 'door' && (!l.locked || this.state.unlocked.includes(l.id)));
+  }
   isDone(id) { return this.state.solved.includes(id) || this.state.unlocked.includes(id); }
   objDone(o) {
     return this.state.solved.includes(o.id) ||
@@ -168,21 +171,116 @@ export class Room {
     if (this.timeLeft() <= 0) this.end(false);
   }
   tick() {
-    if (this.phase === 'play' && !this.state.paused && this.timeLeft() <= 0) {
-      this.end(false);
-      this.flush();
+    if (this.phase !== 'play') return;
+    this.checkTimers();
+    if (this.fresh.length) this.flush();
+  }
+
+  /* ---------- 자동 이벤트 ----------
+     시나리오의 events: [{ id, on, ...조건, if, repeat, do: [연출] }]
+     on: start / enter / inspect / solve / item / together / time / idle */
+  fire(on, ctx = {}) {
+    const s = this.state;
+    for (const ev of this.scenario.events || []) {
+      if (s.over || ev.on !== on || (!ev.repeat && s.fired.includes(ev.id))) continue;
+      if (!this.eventMatches(ev, ctx)) continue;
+      if (!s.fired.includes(ev.id)) s.fired.push(ev.id);
+      this.runEvent(ev, ctx);
     }
+  }
+  eventMatches(ev, ctx) {
+    const s = this.state;
+    if (ev.room && ev.room !== ctx.room) return false;
+    if (ev.obj && ev.obj !== ctx.obj) return false;
+    if (ev.item && ev.item !== ctx.item) return false;
+    if (ctx.only && ev.id !== ctx.only) return false;
+    if (ev.on === 'together') {
+      const n = this.membersIn(ctx.room).length;
+      if (this.cast.length < 2 || n < (ev.count === 'all' || !ev.count ? this.cast.length : ev.count)) return false;
+    }
+    const cond = ev.if || {};
+    if (cond.done && ![].concat(cond.done).every((id) => this.isDone(id))) return false;
+    if (cond.notDone && [].concat(cond.notDone).some((id) => this.isDone(id))) return false;
+    return true;
+  }
+  runEvent(ev, ctx) {
+    const s = this.state;
+    const fill = (t) => String(t)
+      .replace(/\{name\}/g, ctx.char?.name || '누군가')
+      .replace(/\{room\}/g, ctx.room ? this.room(ctx.room).name : '');
+    for (const act of ev.do || []) {
+      // to: 'here'(조건이 일어난 구역, 기본값) / 'all'(전체) / 구역 id
+      const to = act.to || (ctx.room ? 'here' : 'all');
+      const where = to === 'all' ? null : to === 'here' ? ctx.room : to;
+      const target = where ? { room: where } : { global: true };
+      if (act.narr) this.post({ type: 'narr', text: fill(act.narr), ...target });
+      if (act.sys) this.post({ type: 'sys', text: fill(act.sys), icon: act.icon, ...target });
+      if (act.voice) this.post({ type: 'npc', text: fill(act.voice), speaker: act.speaker || '???', ...target });
+      if (act.unlock) {
+        if (!s.unlocked.includes(act.unlock)) s.unlocked.push(act.unlock);
+        s.relocked = s.relocked.filter((id) => id !== act.unlock);
+      }
+      if (act.lock && !s.relocked.includes(act.lock)) s.relocked.push(act.lock);
+      if (act.time) {
+        if (act.time < 0) this.spendTime(-act.time);
+        else if (s.paused) s.pausedLeft += act.time * 1000;
+        else s.endsAt += act.time * 1000;
+      }
+      if (act.hint) {
+        const h = this.scenario.hints.find((x) => !this.isDone(x.until));
+        if (h) this.post({ type: 'sys', text: `${act.hint === true ? '힌트' : act.hint}: ${h.text}`, global: true, icon: 'bulb' });
+      }
+      if (act.effect) this.effect(act.effect, where);
+    }
+  }
+  // 화면 효과는 기록에 남기지 않고 그 구역(또는 전체)에 있는 사람에게만 보낸다
+  effect(name, roomId) {
+    for (const p of this.players.values()) {
+      if (roomId && !p.isGM && this.state.pos[p.id] !== roomId) continue;
+      this.send(p, { t: 'effect', name });
+    }
+  }
+  // 시간 조건(남은 시간, 진전 없음)을 확인한다
+  checkTimers() {
+    const s = this.state;
+    if (this.phase !== 'play' || s.paused) return;
+    const left = this.timeLeft();
+    for (const ev of this.scenario.events || []) {
+      if (ev.on !== 'time' || s.fired.includes(ev.id)) continue;
+      if (left <= this.eventLeft(ev) * 1000) this.fire('time', { only: ev.id });
+    }
+    for (const ev of this.scenario.events || []) {
+      if (ev.on === 'idle' && Date.now() - s.lastProgress >= ev.seconds * 1000) {
+        s.lastProgress = Date.now();
+        this.fire('idle', { only: ev.id });
+      }
+    }
+    if (left <= 0) this.end(false);
+  }
+  eventLeft(ev) { return ev.left ?? this.scenario.timeLimit - (ev.elapsed || 0); }
+  // 다음에 시간 조건을 확인해야 하는 시각
+  nextWake() {
+    const s = this.state;
+    if (this.phase !== 'play' || s.paused) return Infinity;
+    let next = s.endsAt;
+    for (const ev of this.scenario.events || []) {
+      if (ev.on === 'time' && !s.fired.includes(ev.id)) next = Math.min(next, s.endsAt - this.eventLeft(ev) * 1000);
+      if (ev.on === 'idle') next = Math.min(next, s.lastProgress + ev.seconds * 1000);
+    }
+    return next;
   }
 
   /* ---------- 메시지 ---------- */
   // type: say / act / narr / sys. 말은 vol에 따라 퍼지고, 나머지는 같은 구역에만 남는다.
-  post({ type, text, charId, room, vol, global, icon }) {
+  post({ type, text, charId, room, vol, global, icon, speaker }) {
     if (!text) return;
     const r = room || (charId && this.state.pos[charId]);
     const m = { id: this.state.nextId++, type, text, charId, room: r, icon };
+    if (speaker) m.speaker = speaker;
     if (global) m.global = true;
     else {
-      const hear = this.hearing(r, type === 'say' ? (vol || 'say') : 'whisper');
+      const spoken = type === 'say' || type === 'npc';
+      const hear = this.hearing(r, spoken ? (vol || 'say') : 'whisper');
       m.heard = {};
       for (const c of this.cast) {
         const at = this.state.pos[c.id];
@@ -200,14 +298,14 @@ export class Room {
   msgFor(player, m) {
     const base = { id: m.id, icon: m.icon };
     if (player.isGM) {
-      return { ...base, type: m.type, text: m.text, charId: m.charId, vol: m.vol, global: m.global, tag: m.global ? null : this.room(m.room).name };
+      return { ...base, type: m.type, text: m.text, charId: m.charId, speaker: m.speaker, vol: m.vol, global: m.global, tag: m.global ? null : this.room(m.room).name };
     }
-    if (m.global) return { ...base, type: m.type, text: m.text, global: true };
+    if (m.global) return { ...base, type: m.type, text: m.text, speaker: m.speaker, global: true };
     const [quality, at] = m.heard[player.id];
     if (quality === 'muffled') {
       return { ...base, type: 'muffled', text: garble(m.text, m.id), from: this.knows(player.id, m.room) ? this.room(m.room).name : null };
     }
-    return { ...base, type: m.type, text: m.text, charId: m.charId, vol: m.vol, away: m.room !== at ? this.room(m.room).name : null };
+    return { ...base, type: m.type, text: m.text, charId: m.charId, speaker: m.speaker, vol: m.vol, away: m.room !== at ? this.room(m.room).name : null };
   }
 
   /* ---------- 전송 ---------- */
@@ -309,7 +407,7 @@ export class Room {
     cast.forEach((c, i) => { pos[c.id] = starts[i % starts.length]; inv[c.id] = []; known[c.id] = [pos[c.id]]; });
     this.state = {
       cast, pos, inv, known,
-      solved: [], unlocked: [], log: [], nextId: 1,
+      solved: [], unlocked: [], relocked: [], fired: [], log: [], nextId: 1, lastProgress: Date.now(),
       endsAt: Date.now() + this.scenario.timeLimit * 1000, paused: false, pausedLeft: 0,
       over: false, result: null,
     };
@@ -320,6 +418,7 @@ export class Room {
       this.post({ type: 'narr', text: `${josa(c.name, '이', '가')} ${this.room(pos[c.id]).name}에서 눈을 떴다.`, room: pos[c.id] });
       this.post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
     }
+    this.fire('start');
     return null;
   }
 
@@ -331,7 +430,7 @@ export class Room {
       const used = Math.round((this.scenario.timeLimit * 1000 - this.timeLeft()) / 1000);
       this.post({ type: 'sys', text: `탈출 성공! 소요 시간 ${Math.floor(used / 60)}분 ${used % 60}초`, global: true });
     } else {
-      this.post({ type: 'sys', text: '시간 초과. 시설이 완전히 봉쇄되었다…', global: true, icon: 'skull' });
+      this.post({ type: 'sys', text: this.scenario.failText || '시간 초과. 탈출에 실패했다…', global: true, icon: 'skull' });
     }
     s.pausedLeft = this.timeLeft();
     s.paused = true;
@@ -345,6 +444,7 @@ export class Room {
     this.lastActive = Date.now();
     const err = this.dispatch(player, msg);
     if (err) this.send(player, { t: 'error', text: err });
+    if (this.phase === 'play') this.checkTimers();
     this.flush();
   }
 
@@ -437,6 +537,8 @@ export class Room {
     }
     const met = this.membersIn(to).filter((m) => m.id !== c.id);
     if (met.length) this.post({ type: 'sys', text: `${josa(met.map((m) => m.name).join(', '), '과', '와')} 합류했다!`, room: to });
+    this.fire('enter', { char: c, room: to });
+    this.fire('together', { char: c, room: to });
     return null;
   }
 
@@ -473,6 +575,7 @@ export class Room {
     if (this.objDone(obj)) { this.post({ type: 'narr', text: obj.solvedDesc || '이미 해결했다.', room: here }); return null; }
     this.post({ type: 'narr', text: obj.desc, room: here });
     if (obj.bonus && c.skill === 'observe') this.post({ type: 'sys', text: `관찰력 — ${obj.bonus}`, room: here, icon: 'eye' });
+    this.fire('inspect', { char: c, room: here, obj: obj.id });
 
     if (obj.cctv) {
       const lines = this.cast.map((m) => `${m.name}: ${this.room(s.pos[m.id]).name}`).join(' / ');
@@ -537,6 +640,7 @@ export class Room {
     const r = obj.onSolve;
     const here = s.pos[c.id];
     s.solved.push(obj.id);
+    s.lastProgress = Date.now();
     if (obj.needItem) s.inv[c.id] = s.inv[c.id].filter((i) => i !== obj.needItem);
     this.post({ type: 'narr', text: r.text, room: here });
     if (r.unlock && !s.unlocked.includes(r.unlock)) s.unlocked.push(r.unlock);
@@ -548,7 +652,9 @@ export class Room {
     } else {
       this.post({ type: 'say', text: voiceLine(c.personality, 'success'), charId: c.id });
     }
-    if (r.ending) this.end(true);
+    if (r.ending) return this.end(true);
+    this.fire('solve', { char: c, room: here, obj: obj.id });
+    if (r.item) this.fire('item', { char: c, room: here, item: r.item });
     return null;
   }
 

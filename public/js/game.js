@@ -250,6 +250,9 @@ function onServer(msg) {
     case 'lock':
       openLock(msg.obj);
       break;
+    case 'effect':
+      playEffect(msg.name);
+      break;
     case 'left':
       dropSession();
       closeSocket();
@@ -665,6 +668,9 @@ function appendMsg(m) {
   let html;
   if (m.type === 'muffled') {
     html = `<div class="msg muffled"><span class="from">${pix('door', 14, MUFFLED)} ${esc(m.from ? `${m.from} 쪽` : '어딘가')}에서 웅얼거리는 소리</span><p>${esc(m.text)}</p></div>`;
+  } else if (m.type === 'npc') {
+    const from = m.away ? `<span class="from">${esc(m.away)}에서</span>` : '';
+    html = `<div class="msg npc"><span class="avatar sm npc">${pix('speaker', 24)}</span><div>${tag}<b>${esc(m.speaker)}</b>${from}<p>${esc(m.text)}</p></div></div>`;
   } else if (m.type === 'say' && m.charId) {
     const c = castById(m.charId);
     const vol = m.vol === 'shout' ? ' shout' : m.vol === 'whisper' ? ' whisper' : '';
@@ -686,6 +692,7 @@ function logAsText() {
     const where = m.tag ? `[${m.tag}] ` : '';
     const c = m.charId && castById(m.charId);
     if (m.type === 'muffled') lines.push(`(${m.from || '어딘가'}에서 웅얼거리는 소리) ${m.text}`);
+    else if (m.type === 'npc') lines.push(`${where}${m.speaker}: "${m.text}"`);
     else if (m.type === 'say' && c) lines.push(`${where}${c.name}${m.vol === 'shout' ? '(외침)' : m.vol === 'whisper' ? '(속삭임)' : ''}: "${m.text}"`);
     else if (m.type === 'act' && c) lines.push(`${where}* ${josa(c.name, '이', '가')} ${m.text}`);
     else if (m.type === 'sys') lines.push(`${where}<${m.text}>`);
@@ -775,6 +782,17 @@ $('#lock-force').addEventListener('click', () => {
   lockDlg.close();
   send({ t: 'force', obj: lockObj.id });
 });
+
+/* ---------------- 화면 효과 ---------------- */
+// flicker(형광등 깜빡임) / blackout(정전) / alarm(경보)
+function playEffect(name) {
+  if (!['flicker', 'blackout', 'alarm'].includes(name)) return;
+  const fx = $('#fx');
+  fx.className = '';
+  void fx.offsetWidth; // 같은 효과를 연달아 다시 재생
+  fx.className = `fx-${name}`;
+}
+$('#fx').addEventListener('animationend', (e) => { e.currentTarget.className = ''; });
 
 /* ---------------- 엔딩 ---------------- */
 function showEnding() {

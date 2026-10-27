@@ -144,7 +144,7 @@ export class GameRoom extends DurableObject {
     await this.webSocketClose(ws);
   }
 
-  // 시간 초과 판정과 오래된 방 정리
+  // 시간 조건 이벤트, 시간 초과 판정, 오래된 방 정리
   async alarm() {
     if (!this.room) return;
     this.room.tick();
@@ -163,7 +163,7 @@ export class GameRoom extends DurableObject {
       this.sql.exec('INSERT OR REPLACE INTO msgs (id, data) VALUES (?, ?)', m.id, JSON.stringify(m));
     }
     await this.ctx.storage.put('room', room.snapshot());
-    const timeUp = room.phase === 'play' && !room.state.paused ? room.state.endsAt : Infinity;
+    const timeUp = room.phase === 'play' ? room.nextWake() : Infinity;
     const cleanup = Math.max(Date.now() + 60 * 1000, room.lastActive + ROOM_TTL + 1000);
     await this.ctx.storage.setAlarm(Math.min(timeUp, cleanup));
   }
