@@ -42,7 +42,7 @@ function applySettings() {
   const fx = document.querySelector('#btn-fx');
   const snd = document.querySelector('#btn-sound');
   if (fx) { fx.textContent = fxOn ? '효과 켬' : '효과 끔'; fx.classList.toggle('off', !fxOn); }
-  if (snd) { snd.textContent = Sound.enabled ? '소리 켬' : '소리 끔'; snd.classList.toggle('off', !Sound.enabled); }
+  if (snd) { snd.textContent = Sound.label; snd.classList.toggle('off', !Sound.enabled); }
 }
 document.querySelector('#btn-fx').addEventListener('click', () => {
   fxOn = !fxOn;
@@ -380,7 +380,11 @@ function onServer(msg) {
       log.push(...msg.msgs);
       if (screen === 'game') {
         msg.msgs.forEach((m) => { if (gmShows(m)) appendMsg(m); });
-        msg.msgs.forEach((m) => m.sfx && Sound.play(m.sfx));
+        msg.msgs.forEach((m) => {
+          if (m.sfx) Sound.play(m.sfx);
+          else if (m.type === 'say' && m.charId !== view?.me.id) Sound.play('talk');
+          else if (m.type === 'muffled') Sound.play('murmur');
+        });
         markUnread(msg.msgs.length);
       }
       break;
