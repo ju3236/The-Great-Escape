@@ -11,6 +11,7 @@ const HINT_COST = 180;
 const WRONG_COST = 60;
 const MAX_CAST = 6;
 const MAX_TEXT = 300;
+const PIN_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // 속삭임: 같은 구역만 / 대사: 옆 구역 웅얼 / 외침: 옆 구역 또렷, 두 칸 웅얼
 const RANGE = {
@@ -59,9 +60,12 @@ function cleanChar(c) {
 const randomHex = (bytes) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
 
 export class Room {
-  constructor(code, scenarioId, io) {
+  // scenario: 에피소드 id, 또는 시나리오 객체(테스트용)
+  constructor(code, scenario, io) {
     this.code = code;
-    this.scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
+    this.scenario = typeof scenario === 'object' && scenario
+      ? scenario
+      : SCENARIOS.find((s) => s.id === scenario) || SCENARIOS[0];
     this.players = new Map(); // token → player
     this.hostToken = null;
     this.phase = 'lobby';
@@ -85,13 +89,13 @@ export class Room {
       state,
     };
   }
-  static restore(snap, log, io) {
-    const room = new Room(snap.code, snap.scenarioId, io);
+  static restore(snap, log, io, scenario) {
+    const room = new Room(snap.code, scenario || snap.scenarioId, io);
     for (const p of snap.players) room.players.set(p.token, p);
     room.hostToken = snap.hostToken;
     room.phase = snap.phase;
     room.lastActive = snap.lastActive;
-    if (snap.state) room.state = { relocked: [], fired: [], lastProgress: Date.now(), ...snap.state, log };
+    if (snap.state) room.state = { relocked: [], fired: [], hintVotes: [], lastProgress: Date.now(), ...snap.state, log };
     return room;
   }
   takeUnsaved() {
@@ -102,23 +106,73 @@ export class Room {
   online(player) { return this.io.socketsOf(player.token).length > 0; }
 
   /* ---------- 입장 ---------- */
+  // 대기실에서도, 게임 도중에도 들어올 수 있다 (도중 합류는 시작 구역 중 한 곳에서 깨어난다)
   join(isGM, rawChar) {
-    if (this.phase !== 'lobby') return { error: '이미 시작된 방이에요.' };
+    if (this.phase === 'ended') return { error: '이미 끝난 방이에요.' };
     const list = [...this.players.values()];
     if (isGM && list.some((p) => p.isGM)) return { error: '이 방에는 이미 진행자가 있어요.' };
     const char = isGM ? null : cleanChar(rawChar);
     if (!isGM && !char) return { error: '참가할 캐릭터를 골라 주세요.' };
     if (!isGM && list.filter((p) => !p.isGM).length >= MAX_CAST) return { error: `캐릭터는 최대 ${MAX_CAST}명까지예요.` };
-    const player = { token: crypto.randomUUID(), id: randomHex(4), isGM: !!isGM, char };
+    const player = { token: crypto.randomUUID(), id: randomHex(4), pin: this.newPin(), isGM: !!isGM, char };
     this.players.set(player.token, player);
     if (!this.hostToken) this.hostToken = player.token;
+    if (this.phase === 'play' && !isGM) this.addToCast(player);
     return { player };
+  }
+
+  // 다른 기기에서 이어하기용 6자리 번호
+  newPin() {
+    let pin;
+    do {
+      pin = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => PIN_CHARS[b % PIN_CHARS.length]).join('');
+    } while ([...this.players.values()].some((p) => p.pin === pin));
+    return pin;
+  }
+  findByPin(pin) {
+    const want = str(pin, 6).toUpperCase();
+    return want.length === 6 ? [...this.players.values()].find((p) => p.pin === want) : null;
+  }
+  playerById(id) { return [...this.players.values()].find((p) => p.id === id); }
+
+  addToCast(player) {
+    const s = this.state;
+    const c = { ...player.char, id: player.id };
+    const start = shuffle(this.scenario.starts)[0];
+    s.cast.push(c);
+    s.pos[c.id] = start;
+    s.inv[c.id] = [];
+    s.known[c.id] = [start];
+    this.post({ type: 'sys', text: `${c.name} 합류 — 어딘가에서 눈을 떴다.`, global: true });
+    this.post({ type: 'narr', text: `${josa(c.name, '이', '가')} ${this.room(start).name}에서 눈을 떴다.`, room: start });
   }
 
   leave(player) {
     if (this.phase !== 'lobby') return;
+    this.removePlayer(player);
+  }
+
+  removePlayer(player) {
     this.players.delete(player.token);
-    if (this.hostToken === player.token) this.hostToken = this.players.keys().next().value || null;
+    if (this.hostToken === player.token) {
+      const next = [...this.players.values()].find((p) => this.online(p)) || this.players.values().next().value;
+      this.hostToken = next?.token || null;
+    }
+  }
+
+  // 방장은 누구든, 다른 사람은 접속이 끊긴 사람만 내보낼 수 있다
+  kick(by, targetId) {
+    const target = this.playerById(targetId);
+    if (!target || target === by) return null;
+    if (by.token !== this.hostToken && this.online(target)) return '접속 중인 사람은 방장만 내보낼 수 있어요.';
+    this.send(target, { t: 'kicked' });
+    this.removePlayer(target);
+    const c = this.state?.cast.find((x) => x.id === target.id);
+    if (c) {
+      c.gone = true;
+      this.post({ type: 'sys', text: `${josa(c.name, '이', '가')} 방을 떠났다.`, global: true });
+    }
+    return null;
   }
 
   /* ---------- 공용 도우미 ---------- */
@@ -136,7 +190,13 @@ export class Room {
     return this.state.solved.includes(o.id) ||
       (o.onSolve?.unlock && !o.onSolve.item && this.state.unlocked.includes(o.onSolve.unlock));
   }
-  membersIn(roomId) { return this.cast.filter((c) => this.state.pos[c.id] === roomId); }
+  membersIn(roomId) { return this.cast.filter((c) => !c.gone && this.state.pos[c.id] === roomId); }
+  // 지금 실제로 플레이 중인 멤버 (방을 떠났거나 접속이 끊긴 사람은 빠진다)
+  isActive(charId) {
+    const p = this.playerById(charId);
+    return !!p && this.online(p);
+  }
+  activeCast() { return this.cast.filter((c) => !c.gone && this.isActive(c.id)); }
   knows(charId, roomId) { return this.state.known[charId].includes(roomId); }
   learn(charId, roomId) { if (!this.knows(charId, roomId)) this.state.known[charId].push(roomId); }
 
@@ -195,8 +255,9 @@ export class Room {
     if (ev.item && ev.item !== ctx.item) return false;
     if (ctx.only && ev.id !== ctx.only) return false;
     if (ev.on === 'together') {
-      const n = this.membersIn(ctx.room).length;
-      if (this.cast.length < 2 || n < (ev.count === 'all' || !ev.count ? this.cast.length : ev.count)) return false;
+      const active = this.activeCast();
+      const n = active.filter((c) => this.state.pos[c.id] === ctx.room).length;
+      if (active.length < 2 || n < (ev.count === 'all' || !ev.count ? active.length : ev.count)) return false;
     }
     const cond = ev.if || {};
     if (cond.done && ![].concat(cond.done).every((id) => this.isDone(id))) return false;
@@ -215,7 +276,7 @@ export class Room {
       const target = where ? { room: where } : { global: true };
       if (act.narr) this.post({ type: 'narr', text: fill(act.narr), ...target });
       if (act.sys) this.post({ type: 'sys', text: fill(act.sys), icon: act.icon, ...target });
-      if (act.voice) this.post({ type: 'npc', text: fill(act.voice), speaker: act.speaker || '???', ...target });
+      if (act.voice) this.post({ type: 'npc', text: fill(act.voice), speaker: act.speaker || '???', sfx: 'voice', ...target });
       if (act.unlock) {
         if (!s.unlocked.includes(act.unlock)) s.unlocked.push(act.unlock);
         s.relocked = s.relocked.filter((id) => id !== act.unlock);
@@ -273,11 +334,12 @@ export class Room {
 
   /* ---------- 메시지 ---------- */
   // type: say / act / narr / sys. 말은 vol에 따라 퍼지고, 나머지는 같은 구역에만 남는다.
-  post({ type, text, charId, room, vol, global, icon, speaker }) {
+  post({ type, text, charId, room, vol, global, icon, speaker, sfx }) {
     if (!text) return;
     const r = room || (charId && this.state.pos[charId]);
     const m = { id: this.state.nextId++, type, text, charId, room: r, icon };
     if (speaker) m.speaker = speaker;
+    if (sfx) m.sfx = sfx;
     if (global) m.global = true;
     else {
       const spoken = type === 'say' || type === 'npc';
@@ -297,14 +359,14 @@ export class Room {
     return player.isGM || m.global || !!m.heard?.[player.id];
   }
   msgFor(player, m) {
-    const base = { id: m.id, icon: m.icon };
+    const base = { id: m.id, icon: m.icon, sfx: m.sfx };
     if (player.isGM) {
       return { ...base, type: m.type, text: m.text, charId: m.charId, speaker: m.speaker, vol: m.vol, global: m.global, tag: m.global ? null : this.room(m.room).name };
     }
     if (m.global) return { ...base, type: m.type, text: m.text, speaker: m.speaker, global: true };
     const [quality, at] = m.heard[player.id];
     if (quality === 'muffled') {
-      return { ...base, type: 'muffled', text: garble(m.text, m.id), from: this.knows(player.id, m.room) ? this.room(m.room).name : null };
+      return { id: m.id, type: 'muffled', text: garble(m.text, m.id), from: this.knows(player.id, m.room) ? this.room(m.room).name : null };
     }
     return { ...base, type: m.type, text: m.text, charId: m.charId, speaker: m.speaker, vol: m.vol, away: m.room !== at ? this.room(m.room).name : null };
   }
@@ -339,7 +401,7 @@ export class Room {
     const base = {
       phase: this.phase,
       code: this.code,
-      me: { id: p.id, isGM: p.isGM, isHost: p.token === this.hostToken },
+      me: { id: p.id, isGM: p.isGM, isHost: p.token === this.hostToken, pin: p.pin },
       scenario: { id: this.scenario.id, title: this.scenario.title, summary: this.scenario.summary, intro: this.scenario.intro, map: this.scenario.map },
       players,
     };
@@ -347,11 +409,11 @@ export class Room {
 
     const s = this.state;
     const myRoom = p.isGM ? null : s.pos[p.id];
-    const seesChar = (c) => p.isGM || c.id === p.id || s.pos[c.id] === myRoom;
+    const seesChar = (c) => !c.gone && (p.isGM || c.id === p.id || s.pos[c.id] === myRoom);
     const known = (roomId) => p.isGM || this.knows(p.id, roomId);
 
     const cast = this.cast.map((c) => ({
-      id: c.id, name: c.name, color: c.color, image: c.image, sprite: c.sprite,
+      id: c.id, name: c.name, color: c.color, image: c.image, sprite: c.sprite, gone: !!c.gone,
       personality: c.personality, skill: c.skill, intro: c.intro,
       room: seesChar(c) ? s.pos[c.id] : null,
       roomName: seesChar(c) ? this.room(s.pos[c.id]).name : null,
@@ -389,6 +451,7 @@ export class Room {
       ...base,
       cast,
       time: { left: this.timeLeft(), paused: s.paused },
+      hint: { votes: s.hintVotes.length, need: this.hintNeed(), mine: s.hintVotes.includes(p.id) },
       over: s.over,
       result: s.result,
       map: { ...this.scenario.map, rooms: mapRooms, links: mapLinks },
@@ -408,7 +471,7 @@ export class Room {
     cast.forEach((c, i) => { pos[c.id] = starts[i % starts.length]; inv[c.id] = []; known[c.id] = [pos[c.id]]; });
     this.state = {
       cast, pos, inv, known,
-      solved: [], unlocked: [], relocked: [], fired: [], log: [], nextId: 1, lastProgress: Date.now(),
+      solved: [], unlocked: [], relocked: [], fired: [], hintVotes: [], log: [], nextId: 1, lastProgress: Date.now(),
       endsAt: Date.now() + this.scenario.timeLimit * 1000, paused: false, pausedLeft: 0,
       over: false, result: null,
     };
@@ -429,9 +492,9 @@ export class Room {
     if (success) {
       for (const c of this.cast) this.post({ type: 'say', text: voiceLine(c.personality, 'escape'), charId: c.id });
       const used = Math.round((this.scenario.timeLimit * 1000 - this.timeLeft()) / 1000);
-      this.post({ type: 'sys', text: `탈출 성공! 소요 시간 ${Math.floor(used / 60)}분 ${used % 60}초`, global: true });
+      this.post({ type: 'sys', text: `탈출 성공! 소요 시간 ${Math.floor(used / 60)}분 ${used % 60}초`, global: true, sfx: 'win' });
     } else {
-      this.post({ type: 'sys', text: this.scenario.failText || '시간 초과. 탈출에 실패했다…', global: true, icon: 'skull' });
+      this.post({ type: 'sys', text: this.scenario.failText || '시간 초과. 탈출에 실패했다…', global: true, icon: 'skull', sfx: 'lose' });
     }
     s.pausedLeft = this.timeLeft();
     s.paused = true;
@@ -450,6 +513,7 @@ export class Room {
   }
 
   dispatch(player, msg) {
+    if (msg.t === 'kick') return this.kick(player, msg.id);
     if (this.phase === 'lobby') {
       if (msg.t === 'start') {
         if (player.token !== this.hostToken) return '방장만 시작할 수 있어요.';
@@ -491,7 +555,7 @@ export class Room {
       case 'guess': return this.guess(c, msg.obj, msg.value);
       case 'force': return this.force(c, msg.obj);
       case 'give': return this.give(c, msg.item, msg.to);
-      case 'hint': return this.hint(true);
+      case 'hint': return this.voteHint(c);
       default: return null;
     }
   }
@@ -507,12 +571,26 @@ export class Room {
   hint(paid) {
     const h = this.scenario.hints.find((x) => !this.isDone(x.until));
     if (!h) return '더 줄 힌트가 없어요.';
+    this.state.hintVotes = [];
     if (paid) {
-      this.post({ type: 'sys', text: `힌트: ${h.text} (-${HINT_COST / 60}분)`, global: true, icon: 'bulb' });
+      this.post({ type: 'sys', text: `힌트: ${h.text} (-${HINT_COST / 60}분)`, global: true, icon: 'bulb', sfx: 'hint' });
       this.spendTime(HINT_COST);
     } else {
-      this.post({ type: 'sys', text: `진행자의 힌트: ${h.text}`, global: true, icon: 'bulb' });
+      this.post({ type: 'sys', text: `진행자의 힌트: ${h.text}`, global: true, icon: 'bulb', sfx: 'hint' });
     }
+    return null;
+  }
+
+  // 시간이 깎이는 힌트는 지금 플레이 중인 멤버 과반수가 찬성해야 나온다
+  hintNeed() { return Math.floor(Math.max(1, this.activeCast().length) / 2) + 1; }
+  voteHint(c) {
+    const s = this.state;
+    if (!this.scenario.hints.some((x) => !this.isDone(x.until))) return '더 줄 힌트가 없어요.';
+    if (s.hintVotes.includes(c.id)) return '이미 찬성했어요. 다른 멤버의 찬성을 기다리는 중이에요.';
+    s.hintVotes.push(c.id);
+    const need = this.hintNeed();
+    if (s.hintVotes.length >= need) return this.hint(true);
+    this.post({ type: 'sys', text: `${josa(c.name, '이', '가')} 힌트를 원한다 (찬성 ${s.hintVotes.length}/${need}). 힌트 버튼을 누르면 찬성.`, global: true, icon: 'bulb' });
     return null;
   }
 
@@ -531,7 +609,7 @@ export class Room {
     this.post({ type: 'act', text: `${josa(first ? '저편' : this.room(to).name, '으로', '로')} 나간다.`, charId: c.id });
     s.pos[c.id] = to;
     this.learn(c.id, to);
-    this.post({ type: 'act', text: '들어왔다.', charId: c.id });
+    this.post({ type: 'act', text: '들어왔다.', charId: c.id, sfx: 'step' });
     if (first) {
       this.post({ type: 'narr', text: this.room(to).desc, room: to });
       this.post({ type: 'say', text: voiceLine(c.personality, 'move'), charId: c.id });
@@ -557,12 +635,14 @@ export class Room {
       return true;
     }
     if (obj.needAll) {
-      const missing = this.cast.filter((m) => s.pos[m.id] !== here);
+      const missing = this.activeCast().filter((m) => s.pos[m.id] !== here);
       if (missing.length) {
         this.post({ type: 'sys', text: `전원 탑승 확인 실패 — 아직 ${missing.length}명이 오지 않았다.`, room: here });
         this.post({ type: 'say', text: voiceLine(c.personality, 'blocked'), charId: c.id });
         return true;
       }
+      const left = this.cast.filter((m) => !m.gone && !this.isActive(m.id) && s.pos[m.id] !== here);
+      if (left.length) this.post({ type: 'sys', text: `접속이 끊긴 ${left.map((m) => m.name).join(', ')}은(는) 함께 가지 못한다.`, room: here });
     }
     return false;
   }
@@ -616,7 +696,7 @@ export class Room {
     const here = this.state.pos[c.id];
     this.post({ type: 'act', text: `${obj.name}에 "${value}" 입력!`, charId: c.id });
     if (value.toUpperCase() === obj.lock.answer.toUpperCase()) return this.solve(c, obj);
-    this.post({ type: 'narr', text: '삐빅— 틀렸다.', room: here });
+    this.post({ type: 'narr', text: '삐빅— 틀렸다.', room: here, sfx: 'wrong' });
     this.post({ type: 'say', text: voiceLine(c.personality, 'fail'), charId: c.id });
     if (c.skill === 'luck') {
       this.post({ type: 'sys', text: `${c.name}의 행운 — 시간이 줄지 않았다.`, room: here, icon: 'clover' });
@@ -642,8 +722,9 @@ export class Room {
     const here = s.pos[c.id];
     s.solved.push(obj.id);
     s.lastProgress = Date.now();
+    s.hintVotes = [];
     if (obj.needItem && !obj.keepItem) s.inv[c.id] = s.inv[c.id].filter((i) => i !== obj.needItem);
-    this.post({ type: 'narr', text: r.text, room: here });
+    this.post({ type: 'narr', text: r.text, room: here, sfx: r.item ? 'item' : r.unlock ? 'unlock' : 'solve' });
     if (r.unlock && !s.unlocked.includes(r.unlock)) s.unlocked.push(r.unlock);
     if (r.item) {
       s.inv[c.id].push(r.item);

@@ -104,7 +104,8 @@ export class GameRoom extends DurableObject {
         if (res.error) return this.reply(ws, { t: 'error', text: res.error });
         this.attach(ws, res.player);
       } else if (msg.t === 'resume') {
-        const p = room.players.get(msg.token);
+        // 같은 기기는 토큰으로, 다른 기기는 6자리 복귀 번호(PIN)로 돌아온다
+        const p = (msg.token && room.players.get(msg.token)) || (msg.pin && room.findByPin(msg.pin));
         if (!p) return this.reply(ws, { t: 'error', text: '이 방에서 내 자리를 찾을 수 없어요.', fatal: true });
         this.attach(ws, p);
       }
@@ -121,14 +122,27 @@ export class GameRoom extends DurableObject {
     } else {
       room.handle(player, msg);
     }
+    this.dropRemoved();
     await this.save();
+  }
+
+  // 방에서 내보낸 사람의 연결은 닫는다
+  dropRemoved() {
+    for (const ws of this.ctx.getWebSockets()) {
+      const token = ws.deserializeAttachment()?.token;
+      if (token && !this.room.players.has(token)) {
+        ws.serializeAttachment(null);
+        try { ws.close(4000, 'removed'); } catch { /* 이미 닫힘 */ }
+      }
+    }
   }
 
   attach(ws, player) {
     ws.serializeAttachment({ token: player.token });
     this.reply(ws, { t: 'joined', code: this.room.code, token: player.token });
-    this.room.sendLog(player);
+    // 도중 합류 메시지가 겹치지 않게, 새 소식을 먼저 보내고 전체 기록으로 덮는다
     this.room.flush();
+    this.room.sendLog(player);
   }
 
   async webSocketClose(ws, code, reason) {

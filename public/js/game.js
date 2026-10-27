@@ -31,7 +31,26 @@ function show(name) {
   if (name === 'chars') renderCharList();
   if (name === 'online') renderOnline();
   if (name === 'game') startClock(); else stopClock();
+  Sound.bgm(name === 'game' || name === 'intro');
 }
+
+/* ---------------- 설정: 화면 효과 / 소리 ---------------- */
+let fxOn = true;
+try { fxOn = localStorage.getItem('tge.fx') !== 'off'; } catch { /* 저장 불가 */ }
+function applySettings() {
+  document.documentElement.classList.toggle('no-fx', !fxOn);
+  const fx = document.querySelector('#btn-fx');
+  const snd = document.querySelector('#btn-sound');
+  if (fx) { fx.textContent = fxOn ? '효과 켬' : '효과 끔'; fx.classList.toggle('off', !fxOn); }
+  if (snd) { snd.textContent = Sound.enabled ? '소리 켬' : '소리 끔'; snd.classList.toggle('off', !Sound.enabled); }
+}
+document.querySelector('#btn-fx').addEventListener('click', () => {
+  fxOn = !fxOn;
+  try { localStorage.setItem('tge.fx', fxOn ? 'on' : 'off'); } catch { /* 저장 불가 */ }
+  applySettings();
+});
+document.querySelector('#btn-sound').addEventListener('click', () => { Sound.toggle(); applySettings(); });
+applySettings();
 document.addEventListener('click', (e) => {
   const go = e.target.closest('[data-go]');
   if (go) show(go.dataset.go);
@@ -145,18 +164,48 @@ $('#import-chars').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   try {
-    const list = JSON.parse(await file.text());
-    for (const c of list) {
-      if (!c.name) continue;
-      c.id = c.id && !characters.some((x) => x.id === c.id) ? c.id : 'c' + Math.random().toString(36).slice(2);
-      characters.push(c);
-    }
-    saveChars();
-    renderCharList();
+    importCharacters(JSON.parse(await file.text()));
   } catch {
     alert('불러올 수 없는 파일입니다.');
   }
   e.target.value = '';
+});
+
+// 같은 캐릭터(id가 같고 이름도 같음)는 덮어쓰고, 나머지는 새로 추가한다
+function importCharacters(list) {
+  if (!Array.isArray(list)) throw new Error('not a list');
+  for (const c of list) {
+    if (!c || typeof c.name !== 'string' || !c.name.trim()) continue;
+    const same = characters.findIndex((x) => x.id === c.id && x.name === c.name);
+    if (same >= 0) { characters[same] = c; continue; }
+    c.id = c.id && !characters.some((x) => x.id === c.id) ? c.id : 'c' + Math.random().toString(36).slice(2);
+    characters.push(c);
+  }
+  saveChars();
+  renderCharList();
+}
+
+const CODE_PREFIX = 'TGE1:';
+$('#btn-copy-chars').addEventListener('click', async () => {
+  if (!characters.length) return toast('복사할 캐릭터가 없어요.');
+  const code = CODE_PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(characters))));
+  try {
+    await navigator.clipboard.writeText(code);
+    toast('캐릭터 코드를 복사했어요. 다른 기기에서 "코드 붙여넣기"를 누르세요.');
+  } catch {
+    prompt('이 코드를 복사해서 다른 기기에 붙여 넣으세요', code);
+  }
+});
+$('#btn-paste-chars').addEventListener('click', () => {
+  const code = (prompt('캐릭터 코드를 붙여 넣으세요') || '').trim();
+  if (!code) return;
+  try {
+    if (!code.startsWith(CODE_PREFIX)) throw new Error();
+    importCharacters(JSON.parse(decodeURIComponent(escape(atob(code.slice(CODE_PREFIX.length))))));
+    toast('캐릭터를 불러왔어요.');
+  } catch {
+    alert('올바른 캐릭터 코드가 아니에요.');
+  }
 });
 
 function download(name, text) {
@@ -238,7 +287,11 @@ function onServer(msg) {
       break;
     case 'msgs':
       log.push(...msg.msgs);
-      if (screen === 'game') msg.msgs.forEach((m) => { if (gmShows(m)) appendMsg(m); });
+      if (screen === 'game') {
+        msg.msgs.forEach((m) => { if (gmShows(m)) appendMsg(m); });
+        msg.msgs.forEach((m) => m.sfx && Sound.play(m.sfx));
+        markUnread(msg.msgs.length);
+      }
       break;
     case 'view': {
       const prev = view;
@@ -257,6 +310,12 @@ function onServer(msg) {
       dropSession();
       closeSocket();
       show('title');
+      break;
+    case 'kicked':
+      dropSession();
+      closeSocket();
+      show('title');
+      toast('방에서 나가게 되었어요.');
       break;
     case 'error':
       if (msg.fatal) {
@@ -365,7 +424,19 @@ $('#pick-list').addEventListener('click', (e) => {
   store(LAST_CHAR_KEY, pickedChar);
   renderOnline();
 });
-$('#join-code').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); });
+['#join-code', '#resume-code', '#resume-pin'].forEach((sel) => $(sel).addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); }));
+$('#btn-resume-pin').addEventListener('click', () => {
+  const code = $('#resume-code').value.trim();
+  const pin = $('#resume-pin').value.trim();
+  if (!/^[A-Z0-9]{4}$/.test(code) || !/^[A-Z0-9]{6}$/.test(pin)) {
+    showOnlineError('초대 코드 4글자와 복귀 번호 6글자를 입력해 주세요.');
+    return;
+  }
+  closeSocket();
+  session = null;
+  queue = [{ t: 'resume', pin }];
+  connect(code);
+});
 
 function joinPayload() {
   const gm = role() === 'gm';
@@ -414,17 +485,49 @@ function renderLobby() {
     const face = p.isGM ? `<span class="avatar gm">${pix('monitor', 28)}</span>` : avatar(p.char);
     const tags = [p.host && '방장', p.isGM && '진행자', p.id === view.me.id && '나'].filter(Boolean)
       .map((t) => `<span class="badge">${t}</span>`).join('');
+    const kick = canKick(p.id, p.online) ? `<button class="kick" data-kick="${p.id}">내보내기</button>` : '';
     return `<li class="${p.online ? '' : 'offline'}">${face}
       <div class="info"><strong>${p.isGM ? '진행자' : esc(p.char.name)} ${tags}</strong>
       <small>${p.isGM ? '모든 구역을 지켜본다' : `${PERSONALITIES[p.char.personality]?.label} · ${SKILLS[p.char.skill]?.label}`}</small></div>
-      <span class="dot ${p.online ? 'on' : ''}" title="${p.online ? '접속 중' : '연결 끊김'}"></span></li>`;
+      ${kick}<span class="dot ${p.online ? 'on' : ''}" title="${p.online ? '접속 중' : '연결 끊김'}"></span></li>`;
   }).join('');
+  $('#btn-change-char').hidden = view.me.isGM;
   const castCount = view.players.filter((p) => !p.isGM).length;
   $('#btn-lobby-start').hidden = !view.me.isHost;
   $('#btn-lobby-start').disabled = castCount === 0;
   $('#lobby-wait').hidden = view.me.isHost;
 }
 $('#btn-lobby-start').addEventListener('click', () => send({ t: 'start' }));
+
+// 방장은 누구든, 다른 사람은 접속이 끊긴 사람만 내보낼 수 있다
+function canKick(id, online) {
+  return id !== view.me.id && (view.me.isHost || !online);
+}
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-kick]');
+  if (!b || !view) return;
+  const p = view.players.find((x) => x.id === b.dataset.kick);
+  const name = p?.isGM ? '진행자' : p?.char?.name || '이 멤버';
+  if (confirm(`${name}을(를) 방에서 내보낼까요? 다시 들어오려면 새로 참가해야 해요.`)) send({ t: 'kick', id: b.dataset.kick });
+});
+
+const charDlg = $('#char-dialog');
+$('#btn-change-char').addEventListener('click', () => {
+  $('#char-choices').innerHTML = characters.map((c) => `
+    <li data-choose="${c.id}">${avatar(c)}<div class="info"><strong>${esc(c.name)}</strong>
+    <small>${PERSONALITIES[c.personality]?.label} · ${SKILLS[c.skill]?.label}</small></div></li>`).join('')
+    || '<li class="muted">캐릭터 관리에서 먼저 캐릭터를 만들어 주세요.</li>';
+  charDlg.showModal();
+});
+$('#char-choices').addEventListener('click', (e) => {
+  const li = e.target.closest('[data-choose]');
+  if (!li) return;
+  const c = characters.find((x) => x.id === li.dataset.choose);
+  pickedChar = c.id;
+  store(LAST_CHAR_KEY, c.id);
+  send({ t: 'setChar', char: c });
+  charDlg.close();
+});
 $('#btn-leave').addEventListener('click', () => {
   if (confirm('대기실에서 나갈까요?')) send({ t: 'leave' });
 });
@@ -502,6 +605,12 @@ function renderGame() {
   renderChannels();
   renderInput();
   $('#btn-pause').textContent = view.time.paused ? '재개' : '일시정지';
+  if (!isGM()) {
+    const h = view.hint;
+    $('#btn-hint').textContent = h.votes ? `힌트 찬성 ${h.votes}/${h.need}` : '힌트 (-3분)';
+    $('#btn-hint').classList.toggle('voted', h.mine);
+  }
+  $('#resume-info').innerHTML = `다른 기기로 이어하기<br>초대 코드 <b>${esc(view.code)}</b> · 복귀 번호 <b>${esc(view.me.pin)}</b>`;
 }
 
 /* 시계: 서버가 알려 준 남은 시간에서 로컬로 센다 */
@@ -522,6 +631,11 @@ function renderTeam() {
   const online = Object.fromEntries(view.players.map((p) => [p.id, p.online]));
   $('#team').innerHTML = view.cast.map((c) => {
     const mine = c.id === view.me.id;
+    if (c.gone) {
+      return `<div class="member gone">${avatar(c)}<div class="m-info"><b>${esc(c.name)}</b><small>방을 떠났다</small></div></div>`;
+    }
+    const kick = view.phase === 'play' && canKick(c.id, online[c.id])
+      ? `<button class="kick" data-kick="${c.id}" title="${online[c.id] ? '' : '접속이 끊긴 멤버를 내보내면 탈출할 때 기다리지 않아도 돼요'}">내보내기</button>` : '';
     const items = (c.items || []).map((it) => mine
       ? `<button class="item" data-give="${esc(it.id)}" title="건네주기">${pix(it.icon, 14)}${esc(it.name)}</button>`
       : `<span class="item static">${pix(it.icon, 14)}${esc(it.name)}</span>`).join('');
@@ -532,6 +646,7 @@ function renderTeam() {
         <b>${esc(c.name)}${mine ? ' <span class="badge">나</span>' : ''}</b>
         <small>${pix('pin', 10)} ${c.roomName ? esc(c.roomName) : '어딘가'} · ${SKILLS[c.skill]?.label}</small>
         <div class="m-items">${items}</div>
+        ${online[c.id] ? '' : '<small class="offline-tag">접속 끊김</small>'}${kick}
       </div>
     </div>`;
   }).join('');
@@ -726,7 +841,13 @@ $('#rp-form').addEventListener('submit', (e) => {
 
 $('#btn-hint').addEventListener('click', () => {
   if (view?.phase !== 'play') return;
-  if (isGM() || confirm('힌트를 보면 모두의 남은 시간이 3분 줄어들어요. 볼까요?')) send({ t: 'hint' });
+  if (isGM()) return send({ t: 'hint' });
+  const h = view.hint;
+  if (h.mine) return toast('이미 찬성했어요. 다른 멤버의 찬성을 기다리는 중이에요.');
+  const ask = h.need > 1
+    ? `힌트는 과반수(${h.need}명)가 찬성하면 나오고, 모두의 시간이 3분 줄어요. 찬성할까요?`
+    : '힌트를 보면 남은 시간이 3분 줄어들어요. 볼까요?';
+  if (confirm(ask)) send({ t: 'hint' });
 });
 $('#btn-pause').addEventListener('click', () => send({ t: 'pause' }));
 
@@ -783,10 +904,35 @@ $('#lock-force').addEventListener('click', () => {
   send({ t: 'force', obj: lockObj.id });
 });
 
+/* ---------------- 모바일: 한 번에 한 칸씩 ---------------- */
+const narrow = window.matchMedia('(max-width: 860px)');
+let unread = 0;
+function setTab(tab) {
+  $('.game-layout').dataset.tab = tab;
+  document.querySelectorAll('#mobile-tabs [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+  if (tab === 'chat') {
+    unread = 0;
+    $('#unread').hidden = true;
+    $('#log').scrollTop = $('#log').scrollHeight;
+  }
+}
+function markUnread(n) {
+  if (!narrow.matches || $('.game-layout').dataset.tab === 'chat') return;
+  unread += n;
+  $('#unread').hidden = false;
+  $('#unread').textContent = unread > 99 ? '99+' : unread;
+}
+$('#mobile-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tab]');
+  if (b) setTab(b.dataset.tab);
+});
+
 /* ---------------- 화면 효과 ---------------- */
 // flicker(형광등 깜빡임) / blackout(정전) / alarm(경보)
 function playEffect(name) {
   if (!['flicker', 'blackout', 'alarm'].includes(name)) return;
+  Sound.play(name);
+  if (!fxOn) return;
   const fx = $('#fx');
   fx.className = '';
   void fx.offsetWidth; // 같은 효과를 연달아 다시 재생

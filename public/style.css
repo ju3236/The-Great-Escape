@@ -347,7 +347,7 @@ label > input, label > select, label > textarea { margin-top: 6px; color: var(--
 .msg.narr { color: var(--text-dim); }
 .msg.sys {
   color: var(--accent); font-family: var(--font); font-size: 12px; text-align: center;
-  display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
 }
 .msg.act { color: var(--muted); }
 .msg.say { display: flex; gap: 8px; }
@@ -453,6 +453,28 @@ dialog h3 { color: var(--text); font-size: 15px; display: flex; align-items: cen
   0% { opacity: 1; } 16% { opacity: 0; } 33% { opacity: 1; } 50% { opacity: 0; } 66% { opacity: 1; } 83% { opacity: 0; } 100% { opacity: 0; }
 }
 
+
+/* ===== 설정 / 내보내기 / 복귀 ===== */
+.toggle.off { color: var(--muted); text-decoration: line-through; }
+html.no-fx body::before, html.no-fx .title-icon, html.no-fx .title-box h1, html.no-fx .room.here,
+html.no-fx #ending-title, html.no-fx .timer.danger, html.no-fx .timer.paused { animation: none !important; }
+html.no-fx #fx { display: none; }
+.kick { font-size: 11px; padding: 2px 8px; color: var(--danger); margin-left: auto; }
+.m-info .kick { margin: 4px 0 0; align-self: flex-start; }
+.member.gone { opacity: .35; }
+.offline-tag { color: var(--danger) !important; }
+#btn-hint.voted { color: var(--accent-hi); }
+.resume-info {
+  margin-top: 20px; padding: 10px; font-size: 11px; color: var(--muted); line-height: 1.8;
+  border: 2px dashed var(--line);
+}
+.resume-info b { color: var(--text); letter-spacing: .1em; }
+#resume-code, #resume-pin { text-transform: uppercase; letter-spacing: .2em; text-align: center; }
+
+/* ===== 모바일 탭 ===== */
+.mobile-tabs { display: none; }
+.unread { display: inline-block; min-width: 18px; padding: 0 4px; margin-left: 4px; font-size: 10px; background: var(--danger); color: var(--text); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; }
 }
@@ -461,12 +483,20 @@ dialog h3 { color: var(--text); font-size: 15px; display: flex; align-items: cen
 }
 @media (max-width: 860px) {
   .chars-layout, .online-layout { grid-template-columns: 1fr; }
-  #screen-game.active { height: auto; min-height: 100vh; }
-  .game-bar { position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+  /* 게임 화면은 지도 / 채팅 / 출연진을 탭으로 하나씩 보여 준다 */
+  #screen-game.active { height: 100vh; height: 100dvh; }
+  .game-bar { flex-wrap: wrap; gap: 6px; padding: 6px 10px; }
+  .game-tools { flex-wrap: wrap; }
+  .game-tools button { padding: 4px 8px; font-size: 11px; }
+  .timer { font-size: 18px; min-width: 72px; }
   .game-layout { grid-template-columns: 1fr; }
-  .col { overflow: visible; }
-  .col-left { border-right: 0; border-bottom: var(--px) solid var(--shadow); }
-  .team { flex-direction: row; overflow-x: auto; }
-  .member { flex: none; }
-  .col-right { border-left: 0; border-top: var(--px) solid var(--shadow); height: 70vh; }
+  .game-layout > .col { display: none; border: 0; }
+  .game-layout[data-tab=map] > .col-center,
+  .game-layout[data-tab=team] > .col-left { display: block; }
+  .game-layout[data-tab=map] > .col-center { display: flex; }
+  .game-layout[data-tab=chat] > .col-right { display: flex; }
+  .col-center { padding: 12px; }
+  .mobile-tabs { display: flex; flex: none; background: var(--panel); border-top: var(--px) solid var(--shadow); padding-bottom: env(safe-area-inset-bottom); }
+  .mobile-tabs button { flex: 1; margin: 6px 4px; padding: 10px 4px; }
+  .mobile-tabs button.on { background: var(--accent-dark); color: var(--accent-hi); }
 }

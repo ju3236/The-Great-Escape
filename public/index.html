@@ -58,9 +58,14 @@
         <h3>내 캐릭터 <span id="char-count" class="muted"></span></h3>
         <ul id="char-list" class="char-list"></ul>
         <div class="row">
-          <button type="button" id="btn-export-chars">내보내기</button>
-          <label class="file-btn">불러오기<input type="file" id="import-chars" accept=".json" hidden></label>
+          <button type="button" id="btn-export-chars">파일로 내보내기</button>
+          <label class="file-btn">파일 불러오기<input type="file" id="import-chars" accept=".json" hidden></label>
         </div>
+        <div class="row">
+          <button type="button" id="btn-copy-chars">코드로 복사</button>
+          <button type="button" id="btn-paste-chars">코드 붙여넣기</button>
+        </div>
+        <p class="muted small">다른 기기로 캐릭터를 옮길 때: 여기서 "코드로 복사"를 누르고, 다른 기기에서 "코드 붙여넣기"를 누르세요.</p>
       </div>
     </div>
   </section>
@@ -93,6 +98,13 @@
         <h3 class="gap">방 참가하기</h3>
         <label>초대 코드 <input id="join-code" maxlength="4" placeholder="예: K7QX" autocomplete="off"></label>
         <button id="btn-join" class="wide">참가하기</button>
+        <h3 class="gap">다른 기기에서 이어하기</h3>
+        <p class="muted small">게임 화면 왼쪽 아래에 나오는 초대 코드와 복귀 번호를 넣으세요.</p>
+        <div class="row">
+          <label>초대 코드 <input id="resume-code" maxlength="4" placeholder="K7QX" autocomplete="off"></label>
+          <label>복귀 번호 <input id="resume-pin" maxlength="6" placeholder="6자리" autocomplete="off"></label>
+        </div>
+        <button id="btn-resume-pin" class="wide">이어하기</button>
         <p id="online-error" class="error" hidden></p>
       </div>
     </div>
@@ -114,6 +126,7 @@
       <p id="lobby-summary" class="muted small"></p>
       <h3 class="gap">참가자</h3>
       <ul id="lobby-players" class="char-list"></ul>
+      <button id="btn-change-char" class="wide" hidden>내 캐릭터 바꾸기</button>
       <button id="btn-lobby-start" class="primary wide" hidden>녹화 시작</button>
       <p id="lobby-wait" class="muted small center" hidden>방장이 녹화를 시작하기를 기다리는 중…</p>
     </div>
@@ -137,15 +150,18 @@
       <div class="game-tools">
         <span id="net-status" class="net-status" hidden>연결 끊김…</span>
         <span id="timer" class="timer">30:00</span>
+        <button id="btn-fx" class="toggle" title="깜빡임·번쩍임 화면 효과">효과 켬</button>
+        <button id="btn-sound" class="toggle" title="효과음과 배경음">소리 켬</button>
         <button id="btn-pause" hidden>일시정지</button>
         <button id="btn-hint">힌트 (-3분)</button>
         <button id="btn-quit">나가기</button>
       </div>
     </header>
-    <div class="game-layout">
+    <div class="game-layout" data-tab="map">
       <aside class="col col-left">
         <h4>출연진</h4>
         <div id="team" class="team"></div>
+        <div id="resume-info" class="resume-info"></div>
       </aside>
       <main class="col col-center">
         <div id="map" class="map"></div>
@@ -173,6 +189,11 @@
         </form>
       </aside>
     </div>
+    <nav class="mobile-tabs" id="mobile-tabs">
+      <button data-tab="map" class="on">지도</button>
+      <button data-tab="chat">채팅 <span id="unread" class="unread" hidden></span></button>
+      <button data-tab="team">출연진</button>
+    </nav>
   </section>
 
   <!-- 엔딩 -->
@@ -203,6 +224,15 @@
     </form>
   </dialog>
 
+  <!-- 대기실에서 캐릭터 바꾸기 -->
+  <dialog id="char-dialog">
+    <form method="dialog">
+      <h3>어떤 캐릭터로 참가할까?</h3>
+      <ul id="char-choices" class="char-list pick"></ul>
+      <div class="row"><button value="cancel">취소</button></div>
+    </form>
+  </dialog>
+
   <!-- 아이템 건네기 모달 -->
   <dialog id="give-dialog">
     <form method="dialog">
@@ -216,6 +246,7 @@
 
   <script src="js/pixels.js"></script>
   <script src="js/voices.js"></script>
+  <script src="js/sound.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>
