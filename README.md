@@ -45,7 +45,8 @@ GitHub Pages에 올리면 그대로 웹에서 플레이할 수 있습니다.
 | 파일 | 내용 |
 | --- | --- |
 | `index.html` | 화면 구조 |
-| `style.css` | 디자인 |
+| `style.css` | 디자인 (빈티지 도트 테마) |
+| `fonts/` | Galmuri 픽셀 폰트 (SIL OFL 1.1, `fonts/OFL.md`) |
 | `js/voices.js` | 성격별 리액션 대사와 특기 정의 |
 | `js/scenarios.js` | 에피소드(지도, 구역, 연결, 퍼즐, 힌트) |
 | `js/game.js` | 게임 로직 |
