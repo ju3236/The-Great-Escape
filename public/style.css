@@ -424,6 +424,10 @@ dialog h3 { color: var(--text); font-size: 15px; display: flex; align-items: cen
 html.no-fx .truth-text p { animation: none; }
 
 /* ===== 친구와 플레이 ===== */
+.episode-info { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: -6px 0 8px; font-size: 12px; color: var(--text-dim); }
+.episode-info span { display: inline-flex; align-items: center; gap: 5px; }
+.episode-info .stars { color: var(--accent); letter-spacing: 1px; }
+.episode-info .stars i { color: var(--line); font-style: normal; }
 .online-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 20px 16px; max-width: 1000px; margin: 0 auto; }
 .small { font-size: 12px; }
 .center { text-align: center; }

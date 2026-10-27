@@ -21,7 +21,7 @@ const RANGE = {
   shout: { clear: 1, muffled: 2 },
 };
 
-export const SCENARIO_LIST = SCENARIOS.map((s) => ({ id: s.id, title: s.title, summary: s.summary }));
+export const SCENARIO_LIST = SCENARIOS.map((s) => ({ id: s.id, title: s.title, summary: s.summary, info: s.info || null }));
 
 function josa(word, withBatchim, without) {
   const code = String(word).charCodeAt(String(word).length - 1) - 0xac00;

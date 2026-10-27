@@ -45,6 +45,7 @@
 //         to 가 구역이면 그 구역에 있던 캐릭터만, 'all' 이면 모두가 대상. 대상의 화면에 남은 시간이 뜬다.
 //         fail 안에서 { moveTo: 구역 id } 를 쓰면 대상 캐릭터를 그 구역으로 끌고 간다.
 // epilogue  탈출에 성공하면 엔딩 화면에 보여 주는 진상 (문단 목록). 실패하면 "진상 보기"를 눌러야 보인다.
+// info      에피소드 고르는 화면에 보여 줄 정보 { difficulty: 1~5, minutes: '예상 시간', players: '추천 인원' }
 // timeLimit 은 방장이 대기실에서 "제한 시간"을 켰을 때만 쓰인다. 기본은 제한 시간 없음.
 //   문구 안의 {name} 은 조건을 일으킨 캐릭터 이름, {room} 은 그 구역 이름으로 바뀐다.
 export const SCENARIOS = [
@@ -52,6 +53,7 @@ export const SCENARIOS = [
     id: 'bunker',
     title: '제1화 · 지하 연구소',
     summary: '멤버들은 서로 다른 감금실에서 눈을 뜬다. 흩어진 동료와 목소리로 협력해 지상으로 탈출하라.',
+    info: { difficulty: 1, minutes: '30분 안팎', players: '2~3명' },
     timeLimit: 30 * 60,
     failText: '시간 초과. 시설이 완전히 봉쇄되었다…',
     epilogue: [
@@ -310,6 +312,7 @@ export const SCENARIOS = [
     id: 'hospital',
     title: '제2화 · 폐병원 7병동',
     summary: '문 닫은 지 20년 된 병원의 7병동. 병실에 갇힌 멤버들은 소등 전에 비상계단으로 내려가야 한다. 그리고 이곳엔 아직 누군가 남아 있다.',
+    info: { difficulty: 2, minutes: '30~40분', players: '2명' },
     timeLimit: 35 * 60,
     failText: '소등 시간이 되었다. 7병동의 문이 모두 잠겼다…',
     epilogue: [
@@ -558,6 +561,7 @@ export const SCENARIOS = [
     id: 'prison',
     title: '제3화 · 청운교도소',
     summary: '누명을 쓰고 독방에 갇힌 멤버들. 간수의 순찰을 피해 동이 트기 전에 담장을 넘어라.',
+    info: { difficulty: 2, minutes: '30~40분', players: '2~3명' },
     timeLimit: 30 * 60,
     failText: '사이렌이 울리고 서치라이트가 멤버들을 비췄다. 탈옥 실패…',
     epilogue: [
@@ -810,6 +814,7 @@ export const SCENARIOS = [
     id: 'school',
     title: '제4화 · 한빛중학교 구관',
     summary: '방과 후 아무도 쓰지 않는 구관에서 눈을 뜬 멤버들. 하교 종이 울리기 전에 현관으로 나가야 한다. 20년 전, 이 학교에서 사라진 아이가 있다.',
+    info: { difficulty: 2, minutes: '30~40분', players: '2~3명' },
     timeLimit: 30 * 60,
     failText: '종이 울렸다. 구관의 문이 모두 잠겼다. 아무도 하교하지 못했다…',
     epilogue: [
@@ -1049,6 +1054,7 @@ export const SCENARIOS = [
     id: 'mansion',
     title: '제5화 · 백목련 저택의 마지막 만찬',
     summary: '자정의 만찬에 초대받은 멤버들은 각자 잠긴 객실에서 눈을 뜬다. 20년 전 크리스마스 이브, 이 저택에서 한 아이가 사라졌다. 2층부터 지하까지, 저택 전체를 뒤져야 하는 긴 에피소드.',
+    info: { difficulty: 3, minutes: '1시간~1시간 30분', players: '2~4명' },
     timeLimit: 90 * 60,
     failText: '자정의 종이 열두 번 울렸다. 만찬은 끝나지 않는다. 손님들은 영원히 이 저택의 식탁에 앉아 있게 되었다…',
     epilogue: [
@@ -1605,6 +1611,7 @@ export const SCENARIOS = [
     id: 'abyss',
     title: '제6화 · 심연 3호',
     summary: '수심 413m의 해저 관측소. 연락이 끊긴 지 7일째. 감압 포드에서 눈을 뜬 멤버들에게 기지의 인공지능이 친절하게 말을 건다. 무엇을 믿을지는 스스로 정해야 한다. 지금까지 중 가장 어렵다.',
+    info: { difficulty: 5, minutes: '1시간 30분 이상', players: '2~3명' },
     timeLimit: 100 * 60,
     failText: '산소 농도 0%. 심연 3호의 불이 하나씩 꺼진다. 어둠 속에서 누군가 선체를 두드린다. 똑, 똑, 똑.',
     epilogue: [
