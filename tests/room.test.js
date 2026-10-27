@@ -510,3 +510,19 @@ test('분위기 연출은 기본으로 꺼져 있고, 켜면 시간이 지나 �
   on.room.tick();
   assert.ok(on.room.state.log.some((m) => m.text === '어디선가 물방울 소리'));
 });
+
+test('모든 사람의 로그는 게임이 끝난 뒤에만 받을 수 있다', () => {
+  const env = setup(['가', '나']);
+  start(env, ['b', 'd']);
+  const [p1, p2] = env.players;
+  env.room.handle(p1, { t: 'interact', obj: 'box' });
+  env.room.handle(p2, { t: 'fullLog' });
+  assert.ok(!env.sock(p2).sent.some((m) => m.t === 'fullLog'), '진행 중에는 안 준다');
+  env.room.end(true);
+  env.room.handle(p2, { t: 'fullLog' });
+  const full = env.sock(p2).sent.find((m) => m.t === 'fullLog');
+  assert.ok(full, '끝난 뒤에는 준다');
+  const box = full.msgs.find((m) => m.text === '열쇠');
+  assert.ok(box && box.only === p1.id, '다른 사람이 혼자 본 문구도 누가 봤는지와 함께 들어간다');
+  assert.ok(full.msgs.every((m) => !String(m.text).includes('SECRETANSWER')));
+});
