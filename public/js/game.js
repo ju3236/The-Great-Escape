@@ -647,6 +647,7 @@ function renderOptions(sel) {
   $(sel).innerHTML = [
     minutes ? row('timeLimit', `제한 시간 ${minutes}분`, lobby ? '켜면 전체 제한 시간이 생기고, 오답과 힌트에 시간이 줄어요. 끄면 시간 제한 없이 하다가 중간중간 타임어택만 나와요.' : '녹화 중에는 바꿀 수 없어요.', lobby) : '',
     row('autoHint', '자동 힌트', '5분 동안 아무 퍼즐도 못 풀면 힌트가 자동으로 나와요.', true),
+    row('ambient', '분위기 연출', '시간이 흐르면 아무도 건드리지 않아도 저절로 나오는 나레이션과 화면 효과예요. 진행에 꼭 필요한 연출은 꺼도 나와요.', true),
   ].join('');
 }
 document.addEventListener('change', (e) => {
