@@ -531,6 +531,7 @@ html.no-fx #fx { display: none; }
 
 
 /* ===== 여러 캐릭터 / 타임어택 / 가운데 설명창 ===== */
+.channels .save-log { margin-left: auto; font-size: 11px; padding: 4px 8px; flex: none; }
 .faces { display: flex; flex: none; }
 .faces .avatar + .avatar { margin-left: -10px; }
 .member.mine { cursor: pointer; }

@@ -299,12 +299,14 @@ $('#btn-paste-chars').addEventListener('click', () => {
   }
 });
 
-function download(name, text) {
+function download(name, text, type = 'text/plain') {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  a.href = URL.createObjectURL(new Blob([text], { type: `${type};charset=utf-8` }));
   a.download = name;
+  document.body.append(a);
   a.click();
-  URL.revokeObjectURL(a.href);
+  // 바로 해제하면 일부 브라우저에서 파일 이름이 사라진다
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
 }
 
 
@@ -957,12 +959,15 @@ function renderChannels() {
     nav.innerHTML = ids.length > 1
       ? `<span class="ear">${pix('pin', 12)} 내 캐릭터 ${ids.length}명에게 들리는 소리</span>`
       : `<span class="ear">${pix('pin', 12)} ${esc(me?.roomName)} — ${esc(me?.name)}에게 들리는 소리</span>`;
+    nav.insertAdjacentHTML('beforeend', SAVE_LOG_BUTTON);
     return;
   }
   const occupied = view.map.rooms.filter((r) => r.tokens.length);
   nav.innerHTML = `<button data-ch="" class="${gmRoom ? '' : 'on'}">${pix('monitor', 12)}전체</button>` +
-    occupied.map((r) => `<button data-ch="${r.id}" class="${gmRoom === r.id ? 'on' : ''}">${esc(r.name)} <small>${r.tokens.length}</small></button>`).join('');
+    occupied.map((r) => `<button data-ch="${r.id}" class="${gmRoom === r.id ? 'on' : ''}">${esc(r.name)} <small>${r.tokens.length}</small></button>`).join('') +
+    SAVE_LOG_BUTTON;
 }
+const SAVE_LOG_BUTTON = '<button type="button" class="save-log" data-savelog title="지금까지의 역극 로그를 HTML 파일로 저장">로그 저장</button>';
 $('#channels').addEventListener('click', (e) => {
   const b = e.target.closest('[data-ch]');
   if (!b) return;
@@ -1027,6 +1032,158 @@ function appendMsg(m) {
   }
   el.insertAdjacentHTML('beforeend', html);
   el.scrollTop = el.scrollHeight;
+}
+
+/* ---------------- HTML 로그 백업 ----------------
+   게임 채팅처럼 보이는 HTML 파일 하나로 저장한다. 프사·전신 그림·도트 아이콘을 파일 안에 넣어서
+   인터넷 없이 열어도 그대로 보인다. */
+function logFileName() {
+  const d = new Date();
+  const two = (n) => String(n).padStart(2, '0');
+  const stamp = `${d.getFullYear()}${two(d.getMonth() + 1)}${two(d.getDate())}-${two(d.getHours())}${two(d.getMinutes())}`;
+  return `${view.scenario.title.replace(/[\\/:*?"<>|]/g, '')}_역극로그_${stamp}`;
+}
+async function toDataUrl(url) {
+  if (!url || url.startsWith('data:')) return url;
+  try {
+    const blob = await (await fetch(url)).blob();
+    return await new Promise((resolve) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = () => resolve(null);
+      r.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+let savingLog = false;
+async function saveHtmlLog() {
+  if (!view || savingLog) return;
+  savingLog = true;
+  toast('로그를 만드는 중이에요…');
+  try {
+    // 그림을 파일 안에 넣기 위해 미리 받아 둔다
+    const art = {};
+    await Promise.all(view.cast.map(async (c) => {
+      art[c.id] = { a: await toDataUrl(imgUrl(c, 'a') || c.image), b: await toDataUrl(imgUrl(c, 'b')) };
+    }));
+    download(`${logFileName()}.html`, buildHtmlLog(art), 'text/html');
+    toast('HTML 로그를 저장했어요. 파일을 열면 브라우저에서 볼 수 있어요.');
+  } finally {
+    savingLog = false;
+  }
+}
+function buildHtmlLog(art) {
+  const face = (c, cls = '') => {
+    const src = art[c.id]?.a;
+    const inner = src ? `<img src="${src}" alt="">` : spriteSvg(c.sprite, c.color, 40);
+    return `<span class="av ${cls}" style="--c:${esc(c.color)}">${inner}</span>`;
+  };
+  const who = (id) => castById(id);
+  const roomNames = Object.fromEntries((view.map?.rooms || []).filter((r) => r.name).map((r) => [r.id, r.name]));
+  for (const [id, r] of Object.entries(view.rooms || {})) roomNames[id] = r.name;
+  const place = (m) => m.tag || (m.room && roomNames[m.room]) || '';
+  const viewer = isGM() ? '진행자 시점 (모든 구역)' : `${myIds().map((id) => who(id).name).join(', ')} 시점`;
+  const result = view.phase === 'ended'
+    ? (view.result === 'escape' ? `탈출 성공 · 소요 시간 ${fmt(view.time.elapsed)}` : `탈출 실패${view.endText ? ` — ${view.endText}` : ''}`)
+    : `진행 중 · 흐른 시간 ${fmt(view.time.elapsed)}`;
+
+  let lastPlace = '';
+  const rows = log.map((m) => {
+    const where = place(m);
+    // 장소가 바뀌면 구분선을 넣는다 (전체 메시지는 그대로)
+    let sep = '';
+    if (where && where !== lastPlace && !m.global && m.type !== 'muffled') {
+      sep = `<div class="place">${pix('pin', 12)} ${esc(where)}</div>`;
+      lastPlace = where;
+    }
+    const by = !isGM() && myIds().length > 1 && m.by && !m.global ? `<span class="by">${esc(who(m.by).name)}</span>` : '';
+    let body;
+    if (m.type === 'muffled') {
+      body = `<div class="m muffled"><span class="from">${pix('door', 14, MUFFLED)} ${esc(m.from ? `${m.from} 쪽` : '어딘가')}에서 웅얼거리는 소리 ${by}</span><p>${esc(m.text)}</p></div>`;
+    } else if (m.type === 'npc') {
+      body = `<div class="m say npc"><span class="av npc">${pix('speaker', 24)}</span><div><b>${esc(m.speaker)}</b>${m.away ? `<span class="from">${esc(m.away)}에서</span>` : ''}${by}<p>${esc(m.text)}</p></div></div>`;
+    } else if (m.type === 'say' && m.charId) {
+      const c = who(m.charId);
+      const vol = m.vol === 'shout' ? ' shout' : m.vol === 'whisper' ? ' whisper' : '';
+      const volTag = m.vol === 'shout' ? '<span class="vol">외침</span>' : m.vol === 'whisper' ? '<span class="vol">속삭임</span>' : '';
+      body = `<div class="m say${vol}">${face(c)}<div><b style="color:${esc(c.color)}">${esc(c.name)}</b>${volTag}${m.away ? `<span class="from">${esc(m.away)}에서</span>` : ''}<p>${esc(m.text)}</p></div></div>`;
+    } else if (m.type === 'act' && m.charId) {
+      body = `<div class="m act">* ${esc(josa(who(m.charId).name, '이', '가'))} ${esc(m.text)}</div>`;
+    } else {
+      body = `<div class="m ${m.type === 'sys' ? 'sys' : 'narr'}">${m.icon ? pix(m.icon, 16) : ''}<span>${esc(m.text)}</span>${by}</div>`;
+    }
+    return sep + body;
+  }).join('\n');
+
+  const castCards = view.cast.map((c) => `
+    <figure class="card ${c.gone ? 'gone' : ''}">
+      ${art[c.id]?.b ? `<img class="body" src="${art[c.id].b}" alt="">` : face(c, 'big')}
+      <figcaption><b style="color:${esc(c.color)}">${esc(c.name)}</b><small>${esc([c.skill && c.skill !== 'none' ? SKILLS[c.skill]?.label : '', c.intro].filter(Boolean).join(' · '))}</small></figcaption>
+    </figure>`).join('');
+
+  return `<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(view.scenario.title)} — 역극 로그</title>
+<style>
+  :root { --bg:#131512; --panel:#1d201b; --panel2:#272b24; --line:#43493f; --text:#e2dbc5; --dim:#bdb7a1; --muted:#94968a; --accent:#c4ae4c; --danger:#a3362b; --blood:#6e221c; --shadow:#030303; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Galmuri11", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; line-height: 1.65; }
+  svg { image-rendering: pixelated; vertical-align: -3px; flex: none; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 28px 16px 60px; }
+  header { border: 3px solid #615a4a; background: var(--panel); padding: 18px 20px; margin-bottom: 22px; box-shadow: 6px 6px 0 var(--shadow); }
+  header h1 { margin: 0 0 6px; font-size: 22px; color: var(--text); text-shadow: 2px 0 0 var(--blood); }
+  header p { margin: 2px 0; color: var(--dim); font-size: 13px; }
+  .cast { display: flex; flex-wrap: wrap; gap: 14px; margin: 16px 0 0; }
+  .card { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; width: 110px; text-align: center; }
+  .card.gone { opacity: .4; }
+  .card .body { height: 110px; width: auto; filter: drop-shadow(2px 2px 0 rgba(0,0,0,.6)); }
+  .card figcaption { display: flex; flex-direction: column; font-size: 12px; }
+  .card small { color: var(--muted); font-size: 11px; }
+  .log { display: flex; flex-direction: column; gap: 10px; font-size: 15px; }
+  .place { margin-top: 10px; font-size: 12px; color: var(--accent); border-bottom: 1px dashed var(--line); padding-bottom: 4px; display: flex; align-items: center; gap: 6px; }
+  .m.narr { color: var(--dim); display: flex; gap: 6px; }
+  .m.sys { color: var(--accent); font-size: 13px; text-align: center; display: flex; gap: 6px; justify-content: center; align-items: center; }
+  .m.act { color: var(--muted); font-style: italic; }
+  .m.say { display: flex; gap: 10px; align-items: flex-start; }
+  .m.say b { font-size: 13px; }
+  .m.say p { margin: 4px 0 0; padding: 7px 11px; background: var(--panel2); box-shadow: 0 0 0 2px var(--shadow), 3px 3px 0 2px var(--shadow); white-space: pre-wrap; }
+  .m.say.shout p { font-weight: 700; color: #f0cfc3; background: #2a1513; box-shadow: 0 0 0 2px var(--danger), 3px 3px 0 2px var(--shadow); }
+  .m.say.whisper p { opacity: .7; background: transparent; box-shadow: 0 0 0 1px var(--line); }
+  .m.npc b { color: #d0574a; }
+  .m.npc p { font-style: italic; color: #d8c6b4; background: #1c1412; box-shadow: 0 0 0 2px var(--blood), 3px 3px 0 2px var(--shadow); }
+  .m.muffled { color: var(--muted); padding: 6px 10px; border: 2px dashed var(--line); }
+  .m.muffled p { margin: 2px 0 0; letter-spacing: .08em; }
+  .from, .vol { font-size: 11px; color: var(--muted); margin-left: 6px; }
+  .vol { color: var(--accent); }
+  .by { font-size: 10px; color: var(--shadow); background: var(--dim); padding: 0 4px; margin-left: 6px; font-style: normal; }
+  .av { --c:#888; flex: none; width: 36px; height: 36px; display: grid; place-items: center; overflow: hidden; background: color-mix(in srgb, var(--c) 18%, var(--shadow)); box-shadow: 0 0 0 2px var(--shadow), 0 0 0 4px color-mix(in srgb, var(--c) 55%, var(--shadow)); margin: 4px; }
+  .av img, .av svg { width: 100%; height: 100%; object-fit: cover; }
+  .av.big { width: 72px; height: 72px; }
+  .av.npc { --c: #6e221c; background: #120c0b; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 11px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>${esc(view.scenario.title)}</h1>
+    <p>${esc(result)}</p>
+    <p>${esc(viewer)} · 저장한 때 ${esc(new Date().toLocaleString('ko-KR'))}</p>
+    <div class="cast">${castCards}</div>
+  </header>
+  <main class="log">
+${rows}
+  </main>
+  <footer>THE GREAT ESCAPE — 자캐 역극 탈출 게임 로그</footer>
+</div>
+</body>
+</html>
+`;
 }
 
 function logAsText() {
@@ -1186,7 +1343,9 @@ function showEnding() {
   }).join('');
   show('ending');
 }
-$('#btn-save-log').addEventListener('click', () => download(`${view.scenario.title}_역극로그.txt`, logAsText()));
+$('#btn-save-log').addEventListener('click', () => saveHtmlLog());
+$('#btn-save-txt').addEventListener('click', () => download(`${logFileName()}.txt`, logAsText()));
+document.addEventListener('click', (e) => { if (e.target.closest('[data-savelog]')) saveHtmlLog(); });
 $('#btn-ending-title').addEventListener('click', () => {
   dropSession();
   closeSocket();
