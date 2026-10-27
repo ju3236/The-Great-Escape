@@ -42,9 +42,10 @@ const saveChars = () => store(CHAR_KEY, characters);
 const charById = (id) => characters.find((c) => c.id === id) || state?.cast.find((c) => c.id === id);
 
 function avatar(c, size = '') {
+  const px = { sm: 28, lg: 72 }[size] || 40;
   const inner = c.image
-    ? `<img src="${esc(c.image)}" alt="" onerror="this.remove()">`
-    : esc(c.emoji || c.name.slice(0, 1));
+    ? `<img src="${esc(c.image)}" alt="">`
+    : spriteSvg(c.sprite, c.color, px);
   return `<span class="avatar ${size}" style="--c:${esc(c.color)}">${inner}</span>`;
 }
 
@@ -52,12 +53,24 @@ const form = $('#char-form');
 form.personality.innerHTML = Object.entries(PERSONALITIES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 form.skill.innerHTML = Object.entries(SKILLS).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join('');
 const updateSkillDesc = () => { $('#skill-desc').textContent = SKILLS[form.skill.value].desc; };
+function renderSpritePicker() {
+  const current = form.sprite?.value || 'short';
+  $('#sprite-options').innerHTML = Object.entries(SPRITES).map(([k, v]) => `
+    <label class="sprite-opt" title="${v.label}">
+      <input type="radio" name="sprite" value="${k}" ${k === current ? 'checked' : ''}>
+      ${spriteSvg(k, form.color.value, 40)}<span>${v.label}</span>
+    </label>`).join('');
+}
+form.color.addEventListener('input', renderSpritePicker);
+renderSpritePicker();
 form.skill.addEventListener('change', updateSkillDesc);
 updateSkillDesc();
 
 function resetForm() {
   form.reset();
   form.id.value = '';
+  form.sprite.value = 'short';
+  renderSpritePicker();
   $('#form-title').textContent = '새 캐릭터';
   updateSkillDesc();
 }
@@ -98,7 +111,10 @@ $('#char-list').addEventListener('click', (e) => {
   const del = e.target.dataset.del;
   if (edit) {
     const c = characters.find((x) => x.id === edit);
-    for (const k of ['id', 'name', 'emoji', 'color', 'image', 'personality', 'skill', 'intro']) form[k].value = c[k] || '';
+    for (const k of ['id', 'name', 'color', 'image', 'personality', 'skill', 'intro']) form[k].value = c[k] || '';
+    if (!c.color) form.color.value = '#8e3a2e';
+    form.sprite.value = SPRITES[c.sprite] ? c.sprite : 'short';
+    renderSpritePicker();
     $('#form-title').textContent = `${c.name} 수정`;
     updateSkillDesc();
   }
@@ -326,12 +342,14 @@ function renderTimer() {
 }
 
 /* ---------------- 메시지 ---------------- */
+const MUFFLED = { o: '#3d3f37', b: '#24251f', y: '#5f6157' };
 // type: say(말) / act(행동) / narr(나레이션) / sys(시스템)
 // 말은 vol(속삭임·대사·외침)에 따라 퍼지고, 나머지는 같은 구역에만 남는다.
-function post({ type, text, charId, room: roomId, vol, global }) {
+function post({ type, text, charId, room: roomId, vol, global, icon }) {
   if (!text) return;
   const r = roomId || (charId && state.pos[charId]);
   const m = { id: state.nextId++, type, text, charId, room: r };
+  if (icon) m.icon = icon;
   if (global) m.global = true;
   else m.hear = hearing(r, type === 'say' ? (vol || 'say') : 'whisper');
   if (type === 'say' && vol && vol !== 'say') m.vol = vol;
@@ -354,7 +372,7 @@ function appendMsg(m) {
   let html;
   if (muffled) {
     const from = state.known.includes(m.room) ? `${where} 쪽` : '어딘가';
-    html = `<div class="msg muffled"><span class="from">🔇 ${esc(from)}에서 웅얼거리는 소리</span><p>${esc(garble(m.text, m.id))}</p></div>`;
+    html = `<div class="msg muffled"><span class="from">${pix('door', 14, MUFFLED)} ${esc(from)}에서 웅얼거리는 소리</span><p>${esc(garble(m.text, m.id))}</p></div>`;
   } else if (m.type === 'say' && c) {
     const vol = m.vol === 'shout' ? ' shout' : m.vol === 'whisper' ? ' whisper' : '';
     const from = away ? `<span class="from">${esc(where)}에서</span>` : '';
@@ -362,7 +380,7 @@ function appendMsg(m) {
   } else if (m.type === 'act' && c) {
     html = `<div class="msg act">${tag}<i>* ${esc(josa(c.name, '이', '가'))} ${esc(m.text)}</i></div>`;
   } else {
-    html = `<div class="msg ${m.type}">${tag}${esc(m.text)}</div>`;
+    html = `<div class="msg ${m.type}">${tag}${m.icon ? pix(m.icon, 16) : ''}${esc(m.text)}</div>`;
   }
   log.insertAdjacentHTML('beforeend', html);
   log.scrollTop = log.scrollHeight;
@@ -379,8 +397,8 @@ function renderChannels() {
   const ch = currentChannel();
   $('#channels').innerHTML = rooms.map((r) => {
     const n = membersIn(r).length;
-    return `<button data-ch="${r}" class="${ch === r ? 'on' : ''}">${r === here() ? '📍' : ''}${esc(room(r).name)} <small>${n}</small></button>`;
-  }).join('') + `<button data-ch="all" class="${ch === 'all' ? 'on' : ''}">🎬 제작진</button>`;
+    return `<button data-ch="${r}" class="${ch === r ? 'on' : ''}">${r === here() ? pix('pin', 12) : ''}${esc(room(r).name)} <small>${n}</small></button>`;
+  }).join('') + `<button data-ch="all" class="${ch === 'all' ? 'on' : ''}">${pix('monitor', 12)}제작진</button>`;
 }
 $('#channels').addEventListener('click', (e) => {
   const b = e.target.closest('[data-ch]');
@@ -419,14 +437,14 @@ function renderTeam() {
   $('#team').innerHTML = state.cast.map((c) => {
     const items = state.inv[c.id].map((id) => {
       const it = scenario.items[id];
-      return `<button class="item" data-give="${id}" data-owner="${c.id}" title="건네주기">${it.icon} ${esc(it.name)}</button>`;
+      return `<button class="item" data-give="${id}" data-owner="${c.id}" title="건네주기">${pix(it.icon, 14)}${esc(it.name)}</button>`;
     }).join('');
     return `
     <div class="member ${c.id === state.actor ? 'on' : ''}" data-actor="${c.id}" title="${esc(c.intro)}">
       ${avatar(c)}
       <div class="m-info">
         <b>${esc(c.name)}</b>
-        <small>📍 ${esc(room(state.pos[c.id]).name)} · ${SKILLS[c.skill]?.label}</small>
+        <small>${pix('pin', 10)} ${esc(room(state.pos[c.id]).name)} · ${SKILLS[c.skill]?.label}</small>
         <div class="m-items">${items}</div>
       </div>
     </div>`;
@@ -478,7 +496,7 @@ function renderMap() {
   for (const l of scenario.links) {
     if (l.kind === 'wall' || !vis[l.a] || !vis[l.b]) continue;
     const [x, y] = linkPoint(l);
-    const icon = l.kind === 'open' ? '' : linkOpen(l) ? '🚪' : '🔒';
+    const icon = l.kind === 'open' ? '' : pix(linkOpen(l) ? 'door' : 'padlock', 14);
     html += `<span class="link ${l.kind} ${linkOpen(l) ? 'open' : 'locked'}" style="left:${pct(x, w)};top:${pct(y, h)}">${icon}</span>`;
   }
   const map = $('#map');
@@ -492,18 +510,18 @@ function renderMap() {
 function renderRoom() {
   const id = here();
   const r = room(id);
-  $('#room-name').textContent = `📍 ${r.name}`;
+  $('#room-name').innerHTML = `${pix('pin', 18)} ${esc(r.name)}`;
   const others = membersIn(id).filter((c) => c.id !== state.actor).map((c) => c.name);
   $('#room-people').textContent = others.length ? `함께 있는 멤버: ${others.join(', ')}` : '이 구역엔 혼자다';
   $('#room-desc').textContent = r.desc;
   $('#objects').innerHTML = r.objects.map((o) => `
     <button class="obj ${objDone(o) ? 'solved' : ''}" data-obj="${o.id}">
-      <span class="icon">${o.icon}</span><span>${esc(o.name)}</span>
+      <span class="icon">${pix(o.icon, 40)}</span><span>${esc(o.name)}</span>
     </button>`).join('');
   $('#exits').innerHTML = linksOf(id).filter((l) => l.kind !== 'wall').map((l) => {
     const to = other(l, id);
     const name = state.known.includes(to) ? room(to).name : '???';
-    return `<button class="exit ${linkOpen(l) ? '' : 'locked'}" data-room="${to}">${linkOpen(l) ? '→' : '🔒'} ${esc(name)}</button>`;
+    return `<button class="exit ${linkOpen(l) ? '' : 'locked'}" data-room="${to}">${linkOpen(l) ? '▶' : pix('padlock', 12)} ${esc(name)}</button>`;
   }).join('');
 }
 
@@ -513,7 +531,7 @@ function renderInput() {
   const ch = currentChannel();
   const spot = mode === 'narr' ? (ch === 'all' ? '전체' : room(ch).name) : room(here()).name;
   $('#rp-who').innerHTML = mode === 'narr'
-    ? `📖 나레이션 → <b>${esc(spot)}</b>`
+    ? `${pix('book', 16)} 나레이션 → <b>${esc(spot)}</b>`
     : `${avatar(c, 'sm')} <b style="color:${esc(c.color)}">${esc(c.name)}</b> <span class="muted">@ ${esc(spot)}</span>`;
   $('#rp-range').textContent = VOLUME_DESC[mode];
 }
@@ -581,11 +599,11 @@ function interact(obj) {
   post({ type: 'act', text: `${josa(obj.name, '을', '를')} 살펴본다.`, charId: c.id });
   if (objDone(obj)) return post({ type: 'narr', text: obj.solvedDesc || '이미 해결했다.', room: here() });
   post({ type: 'narr', text: obj.desc, room: here() });
-  if (obj.bonus && c.skill === 'observe') post({ type: 'sys', text: `🔍 관찰력 — ${obj.bonus}`, room: here() });
+  if (obj.bonus && c.skill === 'observe') post({ type: 'sys', text: `관찰력 — ${obj.bonus}`, room: here(), icon: 'eye' });
 
   if (obj.cctv) {
     const lines = state.cast.map((m) => `${m.name}: ${room(state.pos[m.id]).name}`).join(' / ');
-    post({ type: 'sys', text: `📺 ${lines}`, room: here() });
+    post({ type: 'sys', text: lines, room: here(), icon: 'monitor' });
     state.cast.forEach((m) => { if (!state.known.includes(state.pos[m.id])) state.known.push(state.pos[m.id]); });
     renderMap();
     return post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
@@ -603,7 +621,7 @@ function interact(obj) {
   }
   if (obj.needItem) {
     const it = scenario.items[obj.needItem];
-    post({ type: 'sys', text: `${it.icon} ${josa(it.name, '을', '를')} 사용했다.`, room: here() });
+    post({ type: 'sys', text: `${josa(it.name, '을', '를')} 사용했다.`, room: here(), icon: it.icon });
   }
   if (obj.lock) return openLock(obj);
   if (obj.onSolve) return solve(obj);
@@ -620,7 +638,7 @@ function solve(obj) {
   if (r.item) {
     state.inv[c.id].push(r.item);
     const it = scenario.items[r.item];
-    post({ type: 'sys', text: `${it.icon} ${c.name} — ${josa(it.name, '을', '를')} 얻었다!`, room: here() });
+    post({ type: 'sys', text: `${c.name} — ${josa(it.name, '을', '를')} 얻었다!`, room: here(), icon: it.icon });
     post({ type: 'say', text: voiceLine(c.personality, 'item'), charId: c.id });
   } else {
     post({ type: 'say', text: voiceLine(c.personality, 'success'), charId: c.id });
@@ -637,7 +655,7 @@ function openGive(ownerId, item) {
   const owner = charById(ownerId);
   const it = scenario.items[item];
   const mates = membersIn(state.pos[ownerId]).filter((m) => m.id !== ownerId);
-  $('#give-title').textContent = `${it.icon} ${josa(it.name, '을', '를')} 누구에게 건넬까?`;
+  $('#give-title').innerHTML = `${pix(it.icon, 20)} ${esc(josa(it.name, '을', '를'))} 누구에게 건넬까?`;
   $('#give-targets').innerHTML = mates.length
     ? mates.map((m) => `<button value="${m.id}" data-to="${m.id}">${avatar(m, 'sm')} ${esc(m.name)}</button>`).join('')
     : `<p class="muted">${esc(josa(owner.name, '과', '와'))} 같은 구역에 있는 멤버가 없다. 같은 구역에 있어야 건넬 수 있다.</p>`;
@@ -660,11 +678,11 @@ let lockObj = null;
 function openLock(obj) {
   lockObj = obj;
   const c = actor();
-  $('#lock-title').textContent = `${obj.icon} ${obj.name}`;
+  $('#lock-title').innerHTML = `${pix(obj.icon, 24)} ${esc(obj.name)}`;
   $('#lock-prompt').textContent = obj.lock.prompt;
   const hint = $('#lock-hint');
   hint.hidden = c.skill !== 'brain' || !obj.lock.hint;
-  hint.textContent = `🧠 ${c.name}의 두뇌 — ${obj.lock.hint}`;
+  hint.innerHTML = `${pix('brain', 16)} ${esc(c.name)}의 두뇌 — ${esc(obj.lock.hint)}`;
   $('#lock-force').hidden = c.skill !== 'strength' || !obj.lock.forceable;
   $('#lock-input').value = '';
   dlg.showModal();
@@ -681,15 +699,15 @@ $('#lock-form').addEventListener('submit', (e) => {
   } else {
     post({ type: 'narr', text: '삐빅— 틀렸다.', room: here() });
     post({ type: 'say', text: voiceLine(c.personality, 'fail'), charId: c.id });
-    if (c.skill === 'luck') post({ type: 'sys', text: `🍀 ${c.name}의 행운 — 시간이 줄지 않았다.`, room: here() });
-    else { post({ type: 'sys', text: `⏱ 오답! -${WRONG_COST / 60}분`, global: true }); spendTime(WRONG_COST); }
+    if (c.skill === 'luck') post({ type: 'sys', text: `${c.name}의 행운 — 시간이 줄지 않았다.`, room: here(), icon: 'clover' });
+    else { post({ type: 'sys', text: `오답! -${WRONG_COST / 60}분`, global: true, icon: 'hourglass' }); spendTime(WRONG_COST); }
   }
 });
 $('#lock-force').addEventListener('click', () => {
   const c = actor();
   dlg.close();
   post({ type: 'act', text: `${josa(lockObj.name, '을', '를')} 힘으로 비틀어 연다!`, charId: c.id });
-  post({ type: 'sys', text: `💪 ${c.name}의 괴력 발동!`, room: here() });
+  post({ type: 'sys', text: `${c.name}의 괴력 발동!`, room: here(), icon: 'fist' });
   solve(lockObj);
 });
 
@@ -698,7 +716,7 @@ $('#btn-hint').addEventListener('click', () => {
   if (state.over) return;
   const h = scenario.hints.find((x) => !isDone(x.until));
   if (!h) return;
-  post({ type: 'sys', text: `💡 힌트: ${h.text} (-${HINT_COST / 60}분)`, global: true });
+  post({ type: 'sys', text: `힌트: ${h.text} (-${HINT_COST / 60}분)`, global: true, icon: 'bulb' });
   spendTime(HINT_COST);
 });
 
@@ -734,7 +752,7 @@ function endGame(success) {
   }
   state.over = true;
   save();
-  $('#ending-title').textContent = success ? '탈출 성공!' : '탈출 실패…';
+  $('#ending-title').innerHTML = success ? `${pix('door', 48)} 탈출 성공` : `${pix('skull', 48)} 탈출 실패…`;
   $('#ending-text').textContent = success
     ? `남은 시간 ${$('#timer').textContent} — ${scenario.title} 클리어`
     : '다음 화에서는 꼭 나갈 수 있을 거야.';
@@ -743,4 +761,5 @@ function endGame(success) {
 }
 $('#btn-save-log').addEventListener('click', () => download(`${scenario.title}_역극로그.txt`, logAsText()));
 
+$('#title-icon').innerHTML = pix('padlock', 72);
 show('title');

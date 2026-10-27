@@ -34,10 +34,10 @@ const SCENARIOS = [
       '천장 스피커가 지직거린다. "…30분 뒤, 이 시설은 완전히 봉쇄된다. 전원, 그 전에 나가라."',
     ],
     items: {
-      keycard: { name: '카드키', icon: '💳' },
-      screwdriver: { name: '드라이버', icon: '🪛' },
-      key: { name: '작은 열쇠', icon: '🗝️' },
-      fuse: { name: '예비 퓨즈', icon: '🔌' },
+      keycard: { name: '카드키', icon: 'card' },
+      screwdriver: { name: '드라이버', icon: 'screwdriver' },
+      key: { name: '작은 열쇠', icon: 'key' },
+      fuse: { name: '예비 퓨즈', icon: 'fuse' },
     },
     hints: [
       { until: 'dA', text: '감금실 A — 멈춘 시계의 숫자를 사물함에.' },
@@ -66,24 +66,24 @@ const SCENARIOS = [
         desc: '형광등이 깜빡이는 좁은 방. 벽시계 하나와 사물함이 있다.',
         objects: [
           {
-            id: 'clockA', name: '멈춘 벽시계', icon: '🕰️',
+            id: 'clockA', name: '멈춘 벽시계', icon: 'clock',
             desc: '시계가 3시 17분에서 멈춰 있다. 초침만 미세하게 떨린다.',
             bonus: '유리에 손톱으로 "기억해"라고 긁어 놓았다.',
           },
           {
-            id: 'bedA', name: '철제 침대', icon: '🛏️',
+            id: 'bedA', name: '철제 침대', icon: 'bed',
             desc: '매트리스 아래 쪽지: "시간은 멈춰도 답은 남는다."',
             bonus: '쪽지 뒷면에 작게 "시 → 분, 4자리".',
           },
           {
-            id: 'lockerA', name: '자물쇠 사물함', icon: '🔒',
+            id: 'lockerA', name: '자물쇠 사물함', icon: 'padlock',
             desc: '4자리 숫자 자물쇠가 걸려 있다.',
             lock: { answer: '0317', prompt: '4자리 숫자를 입력하세요.', hint: '이 방에서 "멈춘" 것은?', forceable: true },
             onSolve: { text: '철컥! 사물함 안에 카드키가 있다.', item: 'keycard' },
             solvedDesc: '텅 빈 사물함.',
           },
           {
-            id: 'doorA', name: '철문', icon: '🚪',
+            id: 'doorA', name: '철문', icon: 'door',
             desc: '카드 리더기가 달린 철문. 바깥쪽에 빗장 걸리는 소리가 났었다.',
             needItem: 'keycard', lackText: '리더기가 붉게 빛난다. 카드키가 필요하다.',
             onSolve: { text: '삑— 초록불과 함께 철문이 열린다!', unlock: 'dA' },
@@ -93,19 +93,19 @@ const SCENARIOS = [
       },
       cellB: {
         name: '감금실 B', rect: [3, 0, 3, 3],
-        desc: '벽면이 온통 낙서로 뒤덮인 방. 구석에 화이트보드가 기대어 있다.',
+        desc: '벽면에 날짜를 센 듯한 붉은 선이 빼곡하다. 구석에 화이트보드가 기대어 있다.',
         objects: [
           {
-            id: 'graffiti', name: '벽 낙서', icon: '✍️',
-            desc: '알아볼 수 없는 낙서 사이 또렷한 글씨: "보안실 비번 0915 — 잊지 마."',
+            id: 'graffiti', name: '벽 낙서', icon: 'graffiti',
+            desc: '누군가 날을 세며 그어 놓은 붉은 선들. 그 아래 또렷한 글씨: "보안실 비번 0915 — 잊지 마."',
             bonus: '낙서 중 일부는 손톱으로 새겼다. 여기 갇혔던 사람이 또 있었던 걸까.',
           },
           {
-            id: 'boardB', name: '화이트보드', icon: '📋',
+            id: 'boardB', name: '화이트보드', icon: 'board',
             desc: '수식 사이 빨간 동그라미 친 글자 넷: E · X · I · T. 화살표가 문을 가리킨다.',
           },
           {
-            id: 'doorB', name: '다이얼 철문', icon: '🚪',
+            id: 'doorB', name: '다이얼 철문', icon: 'door',
             desc: '알파벳 4글자 다이얼 자물쇠가 달린 문.',
             lock: { answer: 'EXIT', prompt: '알파벳 4글자를 입력하세요.', hint: '화이트보드를 보자.', forceable: true },
             onSolve: { text: '다이얼이 맞물리며 문이 열린다!', unlock: 'dB' },
@@ -118,18 +118,18 @@ const SCENARIOS = [
         desc: '불이 거의 들어오지 않는 방. 깨진 거울이 걸려 있다.',
         objects: [
           {
-            id: 'bedC', name: '삐걱이는 침대', icon: '🛏️',
+            id: 'bedC', name: '삐걱이는 침대', icon: 'bed',
             desc: '침대 프레임 나사 하나가 헐겁다.',
             onSolve: { text: '프레임 틈에 일자 드라이버가 끼워져 있었다!', item: 'screwdriver' },
             solvedDesc: '나사가 빠진 침대 프레임.',
           },
           {
-            id: 'mirror', name: '깨진 거울', icon: '🪞',
+            id: 'mirror', name: '깨진 거울', icon: 'mirror',
             desc: '거울 뒷면에 메모: "엘리베이터는 전원이 있어야 움직인다."',
             bonus: '거울 조각에 비친 천장 구석에 작은 카메라가 있다. 누군가 보고 있다.',
           },
           {
-            id: 'doorC', name: '경첩 철문', icon: '🚪',
+            id: 'doorC', name: '경첩 철문', icon: 'door',
             desc: '잠금장치는 단단하지만, 안쪽으로 드러난 경첩 나사가 보인다.',
             needItem: 'screwdriver', lackText: '맨손으로는 경첩 나사를 풀 수 없다.',
             onSolve: { text: '드라이버로 경첩을 풀자 문짝이 덜컹 떨어져 나간다!', unlock: 'dC' },
@@ -142,7 +142,7 @@ const SCENARIOS = [
         desc: '낡은 화물 엘리베이터. 층 버튼 대신 숫자 키패드만 있다.',
         objects: [
           {
-            id: 'keypad', name: '최종 키패드', icon: '🔢',
+            id: 'keypad', name: '최종 키패드', icon: 'keypad',
             desc: '화면에 "최종 인증 코드 입력 — 전원 탑승 확인"이 깜빡인다.',
             needAll: true,
             lock: { answer: '1441', prompt: '최종 인증 코드(4자리)를 입력하세요.', hint: '감금실 A 시계 + 딸의 생일.' },
@@ -155,25 +155,25 @@ const SCENARIOS = [
         desc: '감금실 문들이 늘어선 긴 복도. 문마다 바깥쪽에 빗장이 걸려 있다. 벽에 비상 전원 패널이 있다.',
         objects: [
           {
-            id: 'barA', name: 'A 문 빗장', icon: '🪵', desc: '감금실 A 문에 걸린 빗장.',
+            id: 'barA', name: 'A 문 빗장', icon: 'plank', desc: '감금실 A 문에 걸린 빗장.',
             onSolve: { text: '빗장을 들어 올리자 감금실 A 문이 열린다.', unlock: 'dA' },
           },
           {
-            id: 'barB', name: 'B 문 빗장', icon: '🪵', desc: '감금실 B 문에 걸린 빗장.',
+            id: 'barB', name: 'B 문 빗장', icon: 'plank', desc: '감금실 B 문에 걸린 빗장.',
             onSolve: { text: '빗장을 들어 올리자 감금실 B 문이 열린다.', unlock: 'dB' },
           },
           {
-            id: 'barC', name: 'C 문 빗장', icon: '🪵', desc: '감금실 C 문에 걸린 빗장.',
+            id: 'barC', name: 'C 문 빗장', icon: 'plank', desc: '감금실 C 문에 걸린 빗장.',
             onSolve: { text: '빗장을 들어 올리자 감금실 C 문이 열린다.', unlock: 'dC' },
           },
           {
-            id: 'secLock', name: '보안실 도어락', icon: '🔐',
+            id: 'secLock', name: '보안실 도어락', icon: 'doorlock',
             desc: '보안실 문에 달린 숫자 도어락.',
             lock: { answer: '0915', prompt: '4자리 비밀번호를 입력하세요.', hint: '누군가 벽에 적어 두지 않았을까?' },
             onSolve: { text: '띠리릭— 보안실 문이 열렸다.', unlock: 'dS' },
           },
           {
-            id: 'panel', name: '비상 전원 패널', icon: '⚡',
+            id: 'panel', name: '비상 전원 패널', icon: 'power',
             desc: '퓨즈 소켓 하나가 비어 있고, 옆에 숫자 키패드가 있다.',
             needItem: 'fuse', lackText: '퓨즈 소켓이 비어 있다. 이대로는 작동하지 않는다.',
             lock: { answer: '1124', prompt: '퓨즈를 꽂자 화면이 켜졌다. 비상 전원 암호(4자리)를 입력하세요.', hint: '박사가 잊지 않으려 한 날짜.' },
@@ -187,16 +187,16 @@ const SCENARIOS = [
         desc: '서류가 어지럽게 흩어진 연구실. 철제 캐비닛이 굳게 잠겨 있다.',
         objects: [
           {
-            id: 'journal', name: '연구 일지', icon: '📓',
+            id: 'journal', name: '연구 일지', icon: 'book',
             desc: '"비상 전원 암호는 우리 딸 생일로 해 두었다. 이번엔 잊지 말자." — 박사 K',
             bonus: '마지막 장이 찢겨 있다. 누군가 서둘러 떠난 것 같다.',
           },
           {
-            id: 'photo', name: '책상 위 액자', icon: '🖼️',
+            id: 'photo', name: '책상 위 액자', icon: 'frame',
             desc: '박사와 어린 소녀의 사진. 뒷면에 "지수 첫 생일 — 11월 24일".',
           },
           {
-            id: 'cabinet', name: '철제 캐비닛', icon: '🗄️',
+            id: 'cabinet', name: '철제 캐비닛', icon: 'cabinet',
             desc: '작은 열쇠 구멍이 있는 캐비닛.',
             needItem: 'key', lackText: '열쇠가 필요하다.',
             onSolve: { text: '열쇠가 딸깍 돌아간다. 안에서 예비 퓨즈를 찾았다!', item: 'fuse' },
@@ -208,15 +208,15 @@ const SCENARIOS = [
         name: '보안실', rect: [6, 5, 6, 4],
         desc: '모니터 수십 대가 깜빡이는 보안실.',
         objects: [
-          { id: 'cctv', name: 'CCTV 모니터', icon: '🖥️', desc: '시설 곳곳의 화면이 나온다.', cctv: true },
+          { id: 'cctv', name: 'CCTV 모니터', icon: 'monitor', desc: '시설 곳곳의 화면이 나온다.', cctv: true },
           {
-            id: 'keybox', name: '열쇠함', icon: '🧰',
+            id: 'keybox', name: '열쇠함', icon: 'keybox',
             desc: '벽에 걸린 열쇠함. 대부분 비었지만 하나가 남아 있다.',
             onSolve: { text: '"연구실" 이름표가 붙은 작은 열쇠를 챙겼다.', item: 'key' },
             solvedDesc: '텅 빈 열쇠함.',
           },
           {
-            id: 'memo', name: '보안 메모', icon: '📝',
+            id: 'memo', name: '보안 메모', icon: 'note',
             desc: '"최종 코드 = 처음 깨어난 곳의 시간 + 잊지 말아야 할 날 (전원 탑승 필수)"',
             bonus: '누군가 연필로 "더하기!!"에 밑줄을 쳐 두었다.',
           },

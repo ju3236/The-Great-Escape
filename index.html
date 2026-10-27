@@ -12,9 +12,10 @@
   <!-- 타이틀 -->
   <section id="screen-title" class="screen active">
     <div class="title-box">
+      <div class="title-icon" id="title-icon"></div>
       <p class="eyebrow">자캐 역극 탈출 게임</p>
       <h1>THE GREAT ESCAPE</h1>
-      <p class="sub">내 캐릭터들과 함께 갇힌 곳에서 탈출하라</p>
+      <p class="sub">…눈을 떴을 때, 문은 이미 잠겨 있었다.</p>
       <div class="menu">
         <button id="btn-new" class="primary">새 게임</button>
         <button id="btn-continue" hidden>이어하기</button>
@@ -34,10 +35,11 @@
         <h3 id="form-title">새 캐릭터</h3>
         <input type="hidden" name="id">
         <label>이름 <input name="name" required maxlength="20" placeholder="예: 한서린"></label>
-        <div class="row">
-          <label>이모지 <input name="emoji" maxlength="4" placeholder="🦊"></label>
-          <label>테마색 <input name="color" type="color" value="#e05a47"></label>
-        </div>
+        <label>테마색 <input name="color" type="color" value="#8e3a2e"></label>
+        <fieldset class="sprite-picker">
+          <legend>초상화</legend>
+          <div id="sprite-options" class="sprite-options"></div>
+        </fieldset>
         <label>이미지 URL (선택) <input name="image" type="url" placeholder="https://..."></label>
         <label>성격
           <select name="personality"></select>
@@ -124,11 +126,11 @@
           <div class="rp-who" id="rp-who"></div>
           <div class="rp-row">
             <select id="rp-mode">
-              <option value="say">💬 대사</option>
-              <option value="whisper">🤫 속삭임</option>
-              <option value="shout">📢 외침</option>
-              <option value="act">✋ 행동</option>
-              <option value="narr">📖 나레이션</option>
+              <option value="say">대사</option>
+              <option value="whisper">속삭임</option>
+              <option value="shout">외침</option>
+              <option value="act">행동</option>
+              <option value="narr">나레이션</option>
             </select>
             <input id="rp-text" autocomplete="off" placeholder="캐릭터로 말하거나 행동해 보세요">
             <button class="primary">전송</button>
@@ -161,7 +163,7 @@
       <input id="lock-input" autocomplete="off">
       <div class="row">
         <button value="cancel" formnovalidate>취소</button>
-        <button id="lock-force" type="button" hidden>💪 힘으로 연다</button>
+        <button id="lock-force" type="button" hidden>힘으로 연다</button>
         <button value="ok" class="primary">입력</button>
       </div>
     </form>
@@ -176,6 +178,7 @@
     </form>
   </dialog>
 
+  <script src="js/pixels.js"></script>
   <script src="js/voices.js"></script>
   <script src="js/scenarios.js"></script>
   <script src="js/game.js"></script>
