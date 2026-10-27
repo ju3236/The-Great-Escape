@@ -50,6 +50,7 @@ const FIXTURE = {
     { id: 'boxFx', on: 'inspect', obj: 'box', do: [{ effect: 'flicker' }] },
     { id: 'late', on: 'time', left: 300, do: [{ voice: '5분 남음', speaker: '방송', to: 'all' }, { lock: 'bc' }] },
     { id: 'later', on: 'time', left: 200, do: [{ release: 'bc' }] },
+    { id: 'mood', on: 'time', elapsed: 30, do: [{ narr: '어디선가 물방울 소리', to: 'all' }, { effect: 'flicker', to: 'all' }] },
   ],
 };
 
@@ -494,4 +495,18 @@ test('조사 결과는 조사한 캐릭터에게만, 같은 방 사람에게는 
   assert.ok(seen(p2).includes('상자를 살펴본다.'), '같은 방 사람은 행동은 본다');
   env.room.handle(p1, { t: 'move', to: 'c' });
   assert.ok(!seen(p2).includes('C'), '처음 들어간 방 설명도 들어간 사람만 본다');
+});
+
+test('분위기 연출은 기본으로 꺼져 있고, 켜면 시간이 지나 저절로 나온다', () => {
+  const off = setup(['가']);
+  start(off, ['a']);
+  advance(off, 31_000);
+  off.room.tick();
+  assert.ok(!off.room.state.log.some((m) => m.text === '어디선가 물방울 소리'));
+  assert.ok(!off.sock(off.players[0]).sent.some((m) => m.t === 'effect'));
+  const on = setup(['가']);
+  start(on, ['a'], { ambient: true });
+  advance(on, 31_000);
+  on.room.tick();
+  assert.ok(on.room.state.log.some((m) => m.text === '어디선가 물방울 소리'));
 });

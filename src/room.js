@@ -84,7 +84,7 @@ export class Room {
     this.unsaved = []; // 아직 저장하지 않은 메시지
     this.io = io; // { socketsOf(token) → 열린 소켓 목록 }
     // 방장이 바꾸는 방 설정. 제한 시간은 대기실에서만 바꿀 수 있다.
-    this.options = { autoHint: false, timeLimit: false };
+    this.options = { autoHint: false, timeLimit: false, ambient: false };
   }
 
   // 메시지 기록(log)은 따로 저장하므로 빼고 담는다
@@ -370,6 +370,11 @@ export class Room {
     }
   }
 
+  // 시간이 흐르면 저절로 나오는 분위기 연출(문·타임어택 같은 진행 변화가 없는 것)
+  flavor(ev) {
+    return ev.do.every((a) => !['lock', 'release', 'unlock', 'attack', 'time', 'gameover', 'moveTo', 'hint'].some((k) => a[k]));
+  }
+
   /* ---------- 타임어택 ----------
      { attack: { id, seconds, label, until, success: [연출], fail: [연출] }, to }
      until: { done: 오브젝트·링크 id } / { allIn: 구역 id } / { noneIn: 구역 id }
@@ -413,7 +418,9 @@ export class Room {
     for (const ev of this.scenario.events || []) {
       if (ev.on !== 'time' || s.fired.includes(ev.id)) continue;
       const due = ev.left != null ? left != null && left <= ev.left * 1000 : elapsed >= (ev.elapsed || 0) * 1000;
-      if (due) this.fire('time', { only: ev.id });
+      if (!due) continue;
+      if (!this.options.ambient && this.flavor(ev)) s.fired.push(ev.id);
+      else this.fire('time', { only: ev.id });
     }
     for (const ev of this.scenario.events || []) {
       if (ev.on === 'idle' && this.options.autoHint && Date.now() - s.lastProgress >= ev.seconds * 1000) {
@@ -731,6 +738,7 @@ export class Room {
       if (this.phase !== 'lobby') return '제한 시간은 녹화를 시작하기 전에만 바꿀 수 있어요.';
       this.options.timeLimit = msg.timeLimit;
     }
+    if (typeof msg.ambient === 'boolean') this.options.ambient = msg.ambient;
     if (typeof msg.autoHint === 'boolean' && msg.autoHint !== this.options.autoHint) {
       this.options.autoHint = msg.autoHint;
       if (this.state) this.state.lastProgress = Date.now();
