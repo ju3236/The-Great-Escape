@@ -1195,6 +1195,9 @@ function buildHtmlLog(art, msgs = log, full = false) {
   .memo { margin-top: 28px; background: #b3a682; color: #17120d; padding: 12px 16px; box-shadow: 4px 4px 0 var(--shadow); }
   .memo h2 { margin: 0 0 6px; font-size: 14px; }
   .memo pre { margin: 0; white-space: pre-wrap; font-family: inherit; font-size: 14px; }
+  .truth { margin-top: 28px; border: 3px solid #615a4a; background: var(--panel); padding: 16px 20px; box-shadow: 6px 6px 0 var(--shadow); }
+  .truth h2, .truth summary { margin: 0 0 8px; font-size: 16px; color: var(--accent); cursor: pointer; }
+  .truth p { color: var(--dim); margin: 0 0 10px; }
 </style>
 </head>
 <body>
@@ -1208,6 +1211,7 @@ function buildHtmlLog(art, msgs = log, full = false) {
   <main class="log">
 ${rows}
   </main>
+  ${truthHtml()}
   ${memoText().trim() ? `<section class="memo"><h2>내 메모</h2><pre>${esc(memoText())}</pre></section>` : ''}
   <footer>THE GREAT ESCAPE — 자캐 역극 탈출 게임 로그</footer>
 </div>
@@ -1216,6 +1220,15 @@ ${rows}
 `;
 }
 
+// 진상: 탈출했으면 그대로, 실패했으면 접어 둔다
+function truthHtml() {
+  const lines = view.epilogue || [];
+  if (!lines.length) return '';
+  const body = lines.map((t) => `<p>${esc(t)}</p>`).join('');
+  return view.result === 'escape'
+    ? `<section class="truth"><h2>진상</h2>${body}</section>`
+    : `<details class="truth"><summary>진상 보기 (스포 주의)</summary>${body}</details>`;
+}
 function logAsText(msgs = log, full = false) {
   const who = full ? '모든 사람의 기록' : isGM() ? '진행자 시점' : `${myIds().map((id) => castById(id).name).join(', ')} 시점`;
   const lines = [view.scenario.title, `출연: ${view.cast.map((c) => c.name).join(', ')}`, `(${who})`, ''];
@@ -1229,6 +1242,7 @@ function logAsText(msgs = log, full = false) {
     else if (m.type === 'sys') lines.push(`${where}<${m.text}>`);
     else lines.push(`${where}${m.text}`);
   }
+  if (view.result === 'escape' && view.epilogue?.length) lines.push('', '[진상]', ...view.epilogue);
   return lines.join('\n');
 }
 
@@ -1418,8 +1432,17 @@ function showEnding() {
     const body = imgUrl(c, 'b');
     return `<div>${body ? `<img class="ending-body" src="${esc(body)}" alt="">` : avatar(c, 'lg')}<span>${esc(c.name)}</span></div>`;
   }).join('');
+  renderTruth(success);
   show('ending');
 }
+// 탈출하면 진상을 바로 보여 주고, 실패하면 다시 도전할 수 있게 버튼을 눌러야 보인다
+function renderTruth(open) {
+  const lines = view.epilogue || [];
+  $('#truth-text').innerHTML = lines.map((t, i) => `<p style="animation-delay:${(i * 0.6).toFixed(1)}s">${esc(t)}</p>`).join('');
+  $('#ending-truth').hidden = !lines.length || !open;
+  $('#btn-truth').hidden = !lines.length || open;
+}
+$('#btn-truth').addEventListener('click', () => renderTruth(true));
 $('#btn-save-log').addEventListener('click', () => saveHtmlLog());
 $('#btn-save-txt').addEventListener('click', async () => {
   const { msgs, full } = await exportLog();
