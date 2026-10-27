@@ -132,11 +132,13 @@ export class GameRoom extends DurableObject {
     const room = this.room;
     const token = ws.deserializeAttachment()?.token;
     const player = token && room.players.get(token);
-    if (msg.t === 'join' || msg.t === 'setChar') await this.takeImages(msg.char);
+    if (msg.t === 'join' || msg.t === 'setChar') {
+      for (const ch of [].concat(msg.chars || msg.char || []).slice(0, 6)) await this.takeImages(ch);
+    }
 
     if (!player) {
       if (msg.t === 'join') {
-        const res = room.join(!!msg.gm, msg.char);
+        const res = room.join(!!msg.gm, msg.chars || msg.char);
         if (res.error) return this.reply(ws, { t: 'error', text: res.error });
         this.attach(ws, res.player);
       } else if (msg.t === 'resume') {

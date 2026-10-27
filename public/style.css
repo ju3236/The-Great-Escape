@@ -7,15 +7,15 @@
 
 :root {
   --px: 3px;
-  --bg: #0e100e;
-  --panel: #181b17;
-  --panel-2: #21251f;
-  --panel-3: #2b3029;
-  --line: #3a3f37;
+  --bg: #131512;
+  --panel: #1d201b;
+  --panel-2: #272b24;
+  --panel-3: #31362e;
+  --line: #43493f;
   --frame: #615a4a;      /* 녹슨 쇠 */
-  --text: #d6cfb9;       /* 바랜 뼛빛 */
-  --text-dim: #b0aa95;
-  --muted: #86887c;
+  --text: #e2dbc5;       /* 바랜 뼛빛 */
+  --text-dim: #bdb7a1;
+  --muted: #94968a;
   --accent: #c4ae4c;     /* 꺼져 가는 형광등 */
   --accent-hi: #ddc865;
   --accent-dark: #5e5322;
@@ -49,7 +49,7 @@ body {
 /* 비네팅 + 깜빡이는 형광등 */
 body::before {
   content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 99;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .45) 100%);
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, .35) 100%);
   animation: flicker 7s steps(1) infinite;
 }
 /* 주사선 + 필름 그레인 */
@@ -58,7 +58,7 @@ body::after {
   background:
     repeating-linear-gradient(transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px),
     var(--grain);
-  opacity: .3;
+  opacity: .22;
   mix-blend-mode: multiply;
 }
 @keyframes flicker {
@@ -273,7 +273,7 @@ label > input, label > select, label > textarea { margin-top: 6px; color: var(--
   background-size: 16px 16px; background-position: 0 0, 8px 8px;
   border: var(--px) solid #34372f;
   outline: var(--px) solid #050605; outline-offset: calc(-2 * var(--px) - 1px);
-  filter: brightness(.95);
+  filter: none;
 }
 .room:hover { border-color: var(--frame); filter: brightness(1); }
 /* 지금 위치: 꺼질 듯한 형광등 아래 */
@@ -528,6 +528,38 @@ html.no-fx #fx { display: none; }
 .check input { width: auto; margin: 0; accent-color: var(--accent); box-shadow: none; }
 .ending-body { height: 120px; width: auto; filter: drop-shadow(3px 3px 0 rgba(0, 0, 0, .6)); }
 @media (max-width: 560px) { .img-steps { grid-template-columns: 1fr; } .body-stage { height: 200px; } }
+
+
+/* ===== 여러 캐릭터 / 타임어택 / 가운데 설명창 ===== */
+.faces { display: flex; flex: none; }
+.faces .avatar + .avatar { margin-left: -10px; }
+.member.mine { cursor: pointer; }
+.member.mine:not(.on):hover { border-color: var(--line); }
+.switch-tip { margin: 8px 4px 0; }
+.token.mine { cursor: pointer; }
+.room-head .acting { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 400; color: var(--text-dim); margin-left: 6px; }
+.room-head .acting .avatar { margin: 0; }
+.heard-by { font-family: var(--font); font-size: 10px; color: var(--shadow); background: var(--text-dim); padding: 0 4px; margin-left: 6px; font-style: normal; }
+.timer.elapsed { color: var(--text-dim); text-shadow: none; }
+.attack-banner { display: flex; flex-direction: column; gap: 6px; flex: none; }
+.attack {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px;
+  background: #2a1210; color: #f0d0c4; border: var(--px) solid var(--danger);
+  box-shadow: 0 0 18px rgba(163, 54, 43, .45);
+  animation: attack-pulse 1s steps(2) infinite;
+}
+.attack .label { flex: 1; font-weight: 700; }
+.attack .count { font-size: 26px; font-weight: 700; color: #ff8a73; letter-spacing: .05em; }
+.attack.hurry { animation-duration: .4s; }
+@keyframes attack-pulse { 50% { background: #3a1613; } }
+.room-log {
+  margin: 0 var(--px) 16px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px;
+  background: var(--shadow); border-left: var(--px) solid var(--frame); font-family: var(--font-body); font-size: 14px;
+}
+.room-log p { margin: 0; color: var(--muted); display: flex; align-items: flex-start; gap: 6px; }
+.room-log p.sys { color: var(--accent); font-family: var(--font); font-size: 12px; }
+.room-log p.latest { color: var(--text); }
+.room-log p.latest::before { content: "▶"; color: var(--accent); font-size: 10px; margin-top: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; }

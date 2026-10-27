@@ -27,7 +27,8 @@
 //       'solve'   obj: 오브젝트 id      그 퍼즐을 풂
 //       'item'    item: 아이템 id       그 아이템을 얻음
 //       'together' count: 'all' | 숫자  한 구역에 그만큼 모임 (room 으로 구역 지정 가능)
-//       'time'    left: 초              남은 시간이 그만큼 됨 (elapsed: 초 → 그만큼 지남)
+//       'time'    elapsed: 초           시작하고 그만큼 지남
+//                 left: 초              남은 시간이 그만큼 됨 (방장이 제한 시간을 켰을 때만)
 //       'idle'    seconds: 초           그동안 아무 퍼즐도 못 풂
 //   if: { done: [...], notDone: [...] } 오브젝트나 링크가 해결됐는지 추가 조건
 //   do: 연출 목록. to: 'here'(조건이 일어난 구역, 기본) / 'all'(전체) / 구역 id
@@ -35,13 +36,20 @@
 //       { effect: 'flicker' | 'blackout' | 'alarm' }  화면 효과
 //       { unlock: 링크 id }  문을 연다
 //       { lock: 링크 id }    문을 강제로 잠근다 → { release: 링크 id } 로 원래 상태로 돌린다 (순찰 연출 등)
-//       { time: +60 | -60 }  { hint: true | '머리말' }
+//       { time: +60 | -60 }  제한 시간을 켰을 때만 남은 시간을 늘리거나 줄인다
+//       { hint: true | '머리말' }  자동 힌트를 켰을 때만
+//       { gameover: '문구' }  그 자리에서 탈출 실패로 끝낸다
+//       { attack: { id, seconds, label, until, success: [연출], fail: [연출] } }  타임어택
+//         until: { done: 오브젝트·링크 id } / { allIn: 구역 id } / { noneIn: 구역 id }
+//         to 가 구역이면 그 구역에 있던 캐릭터만, 'all' 이면 모두가 대상. 대상의 화면에 남은 시간이 뜬다.
+//         fail 안에서 { moveTo: 구역 id } 를 쓰면 대상 캐릭터를 그 구역으로 끌고 간다.
+// timeLimit 은 방장이 대기실에서 "제한 시간"을 켰을 때만 쓰인다. 기본은 제한 시간 없음.
 //   문구 안의 {name} 은 조건을 일으킨 캐릭터 이름, {room} 은 그 구역 이름으로 바뀐다.
 export const SCENARIOS = [
   {
     id: 'bunker',
     title: '제1화 · 지하 연구소',
-    summary: '멤버들은 서로 다른 감금실에서 눈을 뜬다. 흩어진 동료와 목소리로 협력해 30분 안에 지상으로 탈출하라.',
+    summary: '멤버들은 서로 다른 감금실에서 눈을 뜬다. 흩어진 동료와 목소리로 협력해 지상으로 탈출하라.',
     timeLimit: 30 * 60,
     failText: '시간 초과. 시설이 완전히 봉쇄되었다…',
     map: { w: 12, h: 9 },
@@ -50,7 +58,7 @@ export const SCENARIOS = [
       '삐— 삐— 삐—',
       '희미한 경보음. 차가운 콘크리트 바닥 위에서 멤버들이 각자 눈을 뜬다.',
       '옆에 있어야 할 동료들이 보이지 않는다. 벽 너머에서 누군가의 기척이 느껴진다.',
-      '천장 스피커가 지직거린다. "…30분 뒤, 이 시설은 완전히 봉쇄된다. 전원, 그 전에 나가라."',
+      '천장 스피커가 지직거린다. "…곧 이 시설은 완전히 봉쇄된다. 전원, 그 전에 나가라."',
     ],
     items: {
       keycard: { name: '카드키', icon: 'card' },
@@ -86,7 +94,19 @@ export const SCENARIOS = [
       { id: 'reunion', on: 'together', count: 'all', do: [{ narr: '흩어졌던 멤버들이 한자리에 모였다. 서로의 얼굴을 보자 조금은 숨이 쉬어진다.' }] },
       {
         id: 'power-on', on: 'solve', obj: 'panel',
-        do: [{ effect: 'flicker', to: 'all' }, { voice: '비상 전원 가동. 엘리베이터를 호출합니다.', speaker: '안내 방송', to: 'all' }],
+        do: [
+          { effect: 'flicker', to: 'all' },
+          { voice: '비상 전원 가동. 엘리베이터를 호출합니다. 경고 — 비상 전원 감지, 봉쇄 절차를 시작합니다.', speaker: '안내 방송', to: 'all' },
+          {
+            to: 'all',
+            attack: {
+              id: 'lockdown', seconds: 240, label: '봉쇄문이 닫히기 전에 모두 엘리베이터로',
+              until: { allIn: 'lift' },
+              success: [{ narr: '모두 엘리베이터에 올라탄 순간, 등 뒤에서 봉쇄문이 쾅 닫힌다.', to: 'all' }],
+              fail: [{ gameover: '봉쇄문이 닫혔다. 엘리베이터에 닿지 못한 채 시설이 완전히 봉쇄되었다…' }],
+            },
+          },
+        ],
       },
       { id: 'lift-first', on: 'enter', room: 'lift', do: [{ narr: '엘리베이터 벽에 긁힌 글씨: "전부 같이 타. 혼자 올라가면 문이 안 열려."' }] },
       { id: 't10', on: 'time', left: 600, do: [{ voice: '봉쇄까지 10분.', speaker: '안내 방송', to: 'all' }, { effect: 'alarm', to: 'all' }] },
@@ -488,7 +508,16 @@ export const SCENARIOS = [
         do: [
           { effect: 'alarm', to: 'all' },
           { voice: '원장님, 7병동 환자들이 금고를 열었습니다. 즉시—', speaker: '원내 방송', to: 'all' },
-          { narr: '방송이 뚝 끊겼다.', to: 'all' },
+          { narr: '방송이 뚝 끊겼다. 아래층 어딘가에서 엘리베이터가 올라오는 소리가 난다.', to: 'all' },
+          {
+            to: 'all',
+            attack: {
+              id: 'director', seconds: 180, label: '누군가 올라온다! 모두 비상계단으로',
+              until: { allIn: 'stairs' },
+              success: [{ narr: '비상계단 문을 닫자, 복도에서 또각거리던 구두 소리가 문 앞에서 멈춘다.', to: 'all' }],
+              fail: [{ gameover: '엘리베이터 문이 열리고, 흰 가운이 복도에 들어섰다. 아무도 7병동을 나가지 못했다…' }],
+            },
+          },
         ],
       },
       { id: 'reunion', on: 'together', count: 'all', do: [{ narr: '모두 모였다. 어디선가 아이의 웃음소리가 아주 작게 들린다.' }] },
@@ -712,24 +741,33 @@ export const SCENARIOS = [
         do: [{ effect: 'flicker' }, { narr: '복도 끝 간수실 문틈으로 불빛이 새어 나온다. 아무도 없는 것 같다… 지금은.' }],
       },
       {
-        id: 'patrol1', on: 'time', left: 1200,
+        id: 'patrol1', on: 'time', elapsed: 600,
         do: [
           { voice: '점호 준비. 순찰 돈다.', speaker: '간수', to: 'all' },
           { effect: 'flicker', to: 'all' },
           { lock: 'dG' },
           { narr: '군홧발 소리가 복도를 따라 다가온다. 간수실 문이 철컥 잠긴다.', to: 'block' },
+          {
+            to: 'block',
+            attack: {
+              id: 'hide', seconds: 25, label: '간수가 온다! 복도에서 벗어나 숨어라',
+              until: { noneIn: 'block' },
+              success: [{ narr: '숨죽인 채 군홧발 소리가 지나가기를 기다렸다.', to: 'all' }],
+              fail: [{ narr: '간수에게 들킨 사람이 1번 감방으로 끌려갔다.', to: 'all' }, { moveTo: 'cell1' }],
+            },
+          },
         ],
       },
-      { id: 'patrol1-end', on: 'time', left: 1080, do: [{ release: 'dG' }, { narr: '발소리가 멀어졌다. 간수실 문 잠금이 풀리는 소리가 난다.', to: 'block' }] },
+      { id: 'patrol1-end', on: 'time', elapsed: 720, do: [{ release: 'dG' }, { narr: '발소리가 멀어졌다. 간수실 문 잠금이 풀리는 소리가 난다.', to: 'block' }] },
       {
-        id: 'patrol2', on: 'time', left: 540,
+        id: 'patrol2', on: 'time', elapsed: 1260,
         do: [
           { voice: '운동장 서치라이트 점검. 출입 통제.', speaker: '간수', to: 'all' },
           { lock: 'dY' },
           { narr: '운동장 쪽 철문에 빗장 걸리는 소리가 난다.', to: 'block' },
         ],
       },
-      { id: 'patrol2-end', on: 'time', left: 420, do: [{ release: 'dY' }, { narr: '운동장 철문의 빗장이 다시 풀렸다.', to: 'block' }] },
+      { id: 'patrol2-end', on: 'time', elapsed: 1380, do: [{ release: 'dY' }, { narr: '운동장 철문의 빗장이 다시 풀렸다.', to: 'block' }] },
       {
         id: 'yard-first', on: 'enter', room: 'yard',
         do: [{ effect: 'flicker' }, { narr: '서치라이트가 {name}의 발끝을 스치고 지나간다. 숨을 멈췄다.' }],
@@ -944,7 +982,19 @@ export const SCENARIOS = [
       { id: 'library-first', on: 'enter', room: 'library', do: [{ narr: '책장 꼭대기에서 책 한 권이 떨어진다. 펼쳐진 페이지에 연필 글씨: "같이 가자."' }] },
       {
         id: 'console-on', on: 'solve', obj: 'console',
-        do: [{ effect: 'flicker', to: 'all' }, { voice: '…다들 집에 가는구나. 나도… 데려가 줘.', speaker: '교내 방송', to: 'all' }],
+        do: [
+          { effect: 'flicker', to: 'all' },
+          { voice: '…다들 집에 가는구나. 나도… 데려가 줘. 종이 울리기 전에.', speaker: '교내 방송', to: 'all' },
+          {
+            to: 'all',
+            attack: {
+              id: 'bell', seconds: 180, label: '하교 종이 울리기 전에 모두 중앙 현관으로',
+              until: { allIn: 'gate' },
+              success: [{ narr: '모두 현관에 모였다. 머리 위 스피커가 숨을 들이쉬는 소리가 난다.', to: 'all' }],
+              fail: [{ gameover: '종이 울렸다. 구관의 문이 모두 잠겼다. 아무도 하교하지 못했다…' }],
+            },
+          },
+        ],
       },
       { id: 'reunion', on: 'together', count: 'all', do: [{ narr: '모두 모였다. 누군가 한 명 더 있는 것 같은 기분이 든다. 세어 보면 맞는데.' }] },
       {
