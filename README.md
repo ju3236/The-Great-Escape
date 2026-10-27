@@ -3,27 +3,39 @@
 친구들이 각자 자기 캐릭터(자캐)를 데리고 접속해서, 대탈출처럼 갇힌 곳을 함께 탈출하는 온라인 역극 게임입니다.
 멤버들은 서로 다른 곳에서 깨어나고, **같은 구역이거나 문·벽 하나 너머에 있어야** 목소리가 닿습니다.
 
-## 실행 (내 컴퓨터)
+## 배포 (Cloudflare)
 
-Node.js 18 이상이 필요합니다.
+Cloudflare Workers 무료 플랜으로 돌아갑니다. 방마다 Durable Object 하나가 게임을 진행하고,
+방 정보와 대화 기록을 저장해 두기 때문에 서버가 잠들거나 다시 시작돼도 진행 중인 방이 사라지지 않습니다.
+
+### 방법 1: 대시보드에서 GitHub 저장소 연결 (추천)
+
+1. [Cloudflare](https://dash.cloudflare.com)에 가입하고 로그인합니다.
+2. **Workers & Pages → 만들기(Create)**에서 **저장소 가져오기(Import a repository)**를 고르고 GitHub를 연결합니다.
+3. 이 저장소를 고릅니다. 배포 명령은 기본값(`npx wrangler deploy`)을 그대로 둡니다.
+4. 배포가 끝나면 나오는 주소(`https://the-great-escape.<내 계정>.workers.dev`)를 친구들과 공유합니다.
+
+이후에는 연결한 브랜치에 새 커밋이 올라올 때마다 자동으로 다시 배포됩니다.
+
+### 방법 2: 내 컴퓨터에서 명령어로 배포
+
+Node.js 20 이상이 필요합니다.
 
 ```bash
 npm install
-npm start          # http://localhost:3000
+npx wrangler login   # 브라우저가 열리면 Cloudflare 계정으로 허락
+npm run deploy
 ```
 
-같은 와이파이의 친구는 `http://<내 컴퓨터 IP>:3000`으로 접속할 수 있습니다.
+### 내 컴퓨터에서 실행해 보기
 
-## 배포 (친구들이 인터넷으로 접속)
+```bash
+npm install
+npm run dev          # http://localhost:8787
+```
 
-[Render](https://render.com) 무료 플랜으로 배포하는 방법입니다.
-
-1. Render에 가입하고 **New → Blueprint**를 누릅니다.
-2. 이 GitHub 저장소를 연결합니다. 저장소의 `render.yaml`을 읽어 자동으로 설정됩니다.
-3. 배포가 끝나면 나오는 주소(`https://...onrender.com`)를 친구들과 공유합니다.
-
-무료 플랜은 15분 동안 아무도 접속하지 않으면 서버가 잠들고, 다음 접속 때 깨어나는 데 30초쯤 걸립니다.
-방 정보는 서버 메모리에만 있어서 서버가 잠들거나 다시 시작되면 진행 중인 방은 사라집니다.
+무료 플랜의 사용량 한도는 Cloudflare 요금 안내에서 확인할 수 있습니다. 친구들끼리 하는 규모라면 넉넉합니다.
+아무도 접속하지 않은 방은 6시간 뒤 자동으로 정리됩니다.
 
 ## 플레이 방법
 
@@ -53,6 +65,7 @@ npm start          # http://localhost:3000
 8. **엔딩**: 내 캐릭터 시점의 역극 로그를 `.txt`로 저장할 수 있습니다. 진행자는 전체 로그를 저장합니다.
 
 창을 닫거나 새로고침해도 타이틀 화면의 **이어하기**로 같은 자리로 돌아올 수 있습니다.
+모두가 나가 있어도 시간은 계속 흐르고, 시간이 다 되면 게임이 끝납니다.
 
 ## 공정한 플레이
 
@@ -61,7 +74,7 @@ npm start          # http://localhost:3000
 
 ## 에피소드 추가하기
 
-`server/scenarios.js`의 `SCENARIOS` 배열에 같은 형식으로 에피소드를 추가하면 방 만들기 화면에 나타납니다.
+`src/scenarios.js`의 `SCENARIOS` 배열에 같은 형식으로 에피소드를 추가하면 방 만들기 화면에 나타납니다.
 지도 크기(`map`), 구역 위치(`rect`), 시작 구역(`starts`), 구역 사이 연결(`links`: 통로, 문, 소리만 통하는 벽)을
 에피소드마다 다르게 정할 수 있습니다. 필드 설명은 파일 맨 위 주석에 있습니다.
 
@@ -74,13 +87,13 @@ npm start          # http://localhost:3000
 
 | 파일 | 내용 |
 | --- | --- |
-| `server/index.js` | 웹 서버와 실시간 통신(WebSocket) |
-| `server/room.js` | 방, 게임 진행, 소리 전달, 판정 |
-| `server/scenarios.js` | 에피소드(지도, 구역, 연결, 퍼즐, 힌트) — 정답이 있어서 브라우저로 보내지 않음 |
+| `src/worker.js` | Cloudflare Worker(주소 연결)와 방마다 하나씩 도는 Durable Object(접속, 저장, 타이머) |
+| `src/room.js` | 방, 게임 진행, 소리 전달, 판정 |
+| `src/scenarios.js` | 에피소드(지도, 구역, 연결, 퍼즐, 힌트) — 정답이 있어서 브라우저로 보내지 않음 |
+| `wrangler.jsonc` | Cloudflare 배포 설정 |
 | `public/index.html` | 화면 구조 |
 | `public/style.css` | 디자인 (음산한 빈티지 도트 테마) |
 | `public/js/game.js` | 캐릭터 관리, 방 만들기·참가, 게임 화면 |
 | `public/js/pixels.js` | 12×12 도트 아이콘과 캐릭터 초상화 |
 | `public/js/voices.js` | 성격별 리액션 대사와 특기 정의 (서버와 함께 씀) |
 | `public/fonts/` | Galmuri 픽셀 폰트 (SIL OFL 1.1, `public/fonts/OFL.md`) |
-| `render.yaml` | Render 배포 설정 |

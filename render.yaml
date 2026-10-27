@@ -1,8 +1,0 @@
-services:
-  - type: web
-    name: the-great-escape
-    runtime: node
-    plan: free
-    buildCommand: npm install
-    startCommand: npm start
-    healthCheckPath: /healthz

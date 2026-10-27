@@ -178,13 +178,18 @@ let view = null;
 let viewAt = 0;
 let log = [];
 
-function connect() {
-  if (ws && ws.readyState <= 1) return;
-  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+let wsCode = null;
+
+// 방마다 접속 주소가 다르다 (/ws?code=XXXX)
+function connect(code) {
+  if (ws && ws.readyState <= 1 && wsCode === code) return;
+  if (ws) { ws.onclose = null; ws.close(); }
+  wsCode = code;
+  ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws?code=${encodeURIComponent(code)}`);
   ws.onopen = () => {
     retry = 0;
     setNet(true);
-    if (session) ws.send(JSON.stringify({ t: 'resume', ...session }));
+    if (session?.code === code) ws.send(JSON.stringify({ t: 'resume', ...session }));
     for (const m of queue) ws.send(JSON.stringify(m));
     queue = [];
   };
@@ -193,12 +198,23 @@ function connect() {
   };
   ws.onclose = () => {
     setNet(false);
-    if (session) setTimeout(connect, Math.min(8000, 500 * 2 ** retry++));
+    if (session?.code === code) setTimeout(() => { if (session?.code === code) connect(code); }, Math.min(8000, 500 * 2 ** retry++));
   };
 }
 function send(obj) {
   if (ws?.readyState === 1) ws.send(JSON.stringify(obj));
-  else { queue.push(obj); connect(); }
+  else if (wsCode) { queue.push(obj); connect(wsCode); }
+}
+function joinRoom(code, payload) {
+  session = null;
+  queue = [{ t: 'join', ...payload }];
+  connect(code);
+}
+function closeSocket() {
+  if (ws) { ws.onclose = null; ws.close(); }
+  ws = null;
+  wsCode = null;
+  setNet(true);
 }
 function setNet(ok) {
   $('#net-status').hidden = ok || !session;
@@ -212,10 +228,6 @@ function dropSession() {
 
 function onServer(msg) {
   switch (msg.t) {
-    case 'hello':
-      scenarios = msg.scenarios;
-      renderEpisodes();
-      break;
     case 'joined':
       session = { code: msg.code, token: msg.token };
       store(SESSION_KEY, session);
@@ -240,12 +252,14 @@ function onServer(msg) {
       break;
     case 'left':
       dropSession();
+      closeSocket();
       show('title');
       break;
     case 'error':
       if (msg.fatal) {
         dropSession();
-        show('title');
+        closeSocket();
+        if (screen !== 'online') show('title');
       }
       if (screen === 'online') {
         $('#online-error').hidden = false;
@@ -296,9 +310,24 @@ $('#btn-chars').addEventListener('click', () => show('chars'));
 $('#btn-continue').addEventListener('click', () => {
   session = store(SESSION_KEY);
   if (!session) return show('title');
-  if (ws?.readyState === 1) ws.send(JSON.stringify({ t: 'resume', ...session }));
-  else connect();
+  closeSocket();
+  connect(session.code);
 });
+
+async function loadScenarios() {
+  if (scenarios.length) return;
+  try {
+    const res = await fetch('/api/scenarios');
+    scenarios = await res.json();
+    renderEpisodes();
+  } catch {
+    showOnlineError('서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+  }
+}
+function showOnlineError(text) {
+  $('#online-error').hidden = false;
+  $('#online-error').textContent = text;
+}
 
 function renderEpisodes() {
   const sel = $('#episode-select');
@@ -310,7 +339,7 @@ $('#episode-select').addEventListener('change', (e) => {
 });
 
 function renderOnline() {
-  connect();
+  loadScenarios();
   $('#online-error').hidden = true;
   const gm = role() === 'gm';
   $('#role-desc').textContent = gm
@@ -339,25 +368,38 @@ function joinPayload() {
   const gm = role() === 'gm';
   const c = characters.find((x) => x.id === pickedChar);
   if (!gm && !c) {
-    $('#online-error').hidden = false;
-    $('#online-error').textContent = '데려갈 캐릭터를 골라 주세요.';
+    showOnlineError('데려갈 캐릭터를 골라 주세요.');
     return null;
   }
   return { gm, char: gm ? null : c };
 }
-$('#btn-create').addEventListener('click', () => {
+$('#btn-create').addEventListener('click', async (e) => {
   const p = joinPayload();
-  if (p) send({ t: 'create', scenario: $('#episode-select').value, ...p });
+  if (!p) return;
+  e.currentTarget.disabled = true;
+  try {
+    const res = await fetch('/api/rooms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario: $('#episode-select').value }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    joinRoom(data.code, p);
+  } catch (err) {
+    showOnlineError(err.message || '서버에 연결하지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+  } finally {
+    $('#btn-create').disabled = false;
+  }
 });
 $('#btn-join').addEventListener('click', () => {
   const p = joinPayload();
-  const code = $('#join-code').value.trim();
-  if (!code) {
-    $('#online-error').hidden = false;
-    $('#online-error').textContent = '초대 코드를 입력해 주세요.';
+  const code = $('#join-code').value.trim().toUpperCase();
+  if (!/^[A-Z0-9]{4}$/.test(code)) {
+    showOnlineError('초대 코드 4글자를 입력해 주세요.');
     return;
   }
-  if (p) send({ t: 'join', code, ...p });
+  if (p) joinRoom(code, p);
 });
 
 /* ---------------- 대기실 ---------------- */
@@ -685,7 +727,7 @@ $('#btn-quit').addEventListener('click', () => {
   if (!confirm('타이틀로 나갈까요? 게임은 계속 진행되고, "이어하기"로 다시 들어올 수 있어요.')) return;
   const keep = session;
   session = null;
-  ws?.close();
+  closeSocket();
   store(SESSION_KEY, keep);
   show('title');
 });
@@ -749,7 +791,7 @@ function showEnding() {
 $('#btn-save-log').addEventListener('click', () => download(`${view.scenario.title}_역극로그.txt`, logAsText()));
 $('#btn-ending-title').addEventListener('click', () => {
   dropSession();
-  ws?.close();
+  closeSocket();
   show('title');
 });
 

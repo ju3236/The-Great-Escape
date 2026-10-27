@@ -19,7 +19,7 @@
 //   onSolve     { text, item, unlock, ending }  해결 결과 (unlock: 링크 id)
 //   solvedDesc  해결 후 다시 조사했을 때 설명
 //   cctv        조사하면 모든 멤버의 위치를 알려 준다
-const SCENARIOS = [
+export const SCENARIOS = [
   {
     id: 'bunker',
     title: '제1화 · 지하 연구소',
@@ -226,4 +226,3 @@ const SCENARIOS = [
   },
 ];
 
-module.exports = SCENARIOS;

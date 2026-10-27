@@ -1,8 +1,11 @@
 // 방 하나의 게임 진행. 모든 판정은 서버에서 하고, 각 플레이어에게는 그 캐릭터가 보고 들을 수 있는 것만 보낸다.
-const crypto = require('crypto');
-const SCENARIOS = require('./scenarios');
-const { PERSONALITIES, SKILLS, voiceLine } = require('../public/js/voices');
-const { SPRITES } = require('../public/js/pixels');
+// 실행 환경과는 io(소켓 찾기)로만 연결된다. 저장은 snapshot()/restore()로 한다.
+import { SCENARIOS } from './scenarios.js';
+import voices from '../public/js/voices.js';
+import pixels from '../public/js/pixels.js';
+
+const { PERSONALITIES, SKILLS, voiceLine } = voices;
+const { SPRITES } = pixels;
 
 const HINT_COST = 180;
 const WRONG_COST = 60;
@@ -16,7 +19,7 @@ const RANGE = {
   shout: { clear: 1, muffled: 2 },
 };
 
-const SCENARIO_LIST = SCENARIOS.map((s) => ({ id: s.id, title: s.title, summary: s.summary }));
+export const SCENARIO_LIST = SCENARIOS.map((s) => ({ id: s.id, title: s.title, summary: s.summary }));
 
 function josa(word, withBatchim, without) {
   const code = String(word).charCodeAt(String(word).length - 1) - 0xac00;
@@ -53,16 +56,50 @@ function cleanChar(c) {
   };
 }
 
-class Room {
-  constructor(code, scenarioId) {
+const randomHex = (bytes) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+export class Room {
+  constructor(code, scenarioId, io) {
     this.code = code;
     this.scenario = SCENARIOS.find((s) => s.id === scenarioId) || SCENARIOS[0];
     this.players = new Map(); // token → player
     this.hostToken = null;
     this.phase = 'lobby';
     this.lastActive = Date.now();
-    this.fresh = [];
+    this.state = null;
+    this.fresh = []; // 아직 플레이어에게 보내지 않은 메시지
+    this.unsaved = []; // 아직 저장하지 않은 메시지
+    this.io = io; // { socketsOf(token) → 열린 소켓 목록 }
   }
+
+  // 메시지 기록(log)은 따로 저장하므로 빼고 담는다
+  snapshot() {
+    const state = this.state && { ...this.state, log: undefined };
+    return {
+      code: this.code,
+      scenarioId: this.scenario.id,
+      players: [...this.players.values()],
+      hostToken: this.hostToken,
+      phase: this.phase,
+      lastActive: this.lastActive,
+      state,
+    };
+  }
+  static restore(snap, log, io) {
+    const room = new Room(snap.code, snap.scenarioId, io);
+    for (const p of snap.players) room.players.set(p.token, p);
+    room.hostToken = snap.hostToken;
+    room.phase = snap.phase;
+    room.lastActive = snap.lastActive;
+    if (snap.state) room.state = { ...snap.state, log };
+    return room;
+  }
+  takeUnsaved() {
+    const list = this.unsaved;
+    this.unsaved = [];
+    return list;
+  }
+  online(player) { return this.io.socketsOf(player.token).length > 0; }
 
   /* ---------- 입장 ---------- */
   join(isGM, rawChar) {
@@ -72,13 +109,7 @@ class Room {
     const char = isGM ? null : cleanChar(rawChar);
     if (!isGM && !char) return { error: '참가할 캐릭터를 골라 주세요.' };
     if (!isGM && list.filter((p) => !p.isGM).length >= MAX_CAST) return { error: `캐릭터는 최대 ${MAX_CAST}명까지예요.` };
-    const player = {
-      token: crypto.randomUUID(),
-      id: crypto.randomBytes(4).toString('hex'),
-      isGM: !!isGM,
-      char,
-      sockets: new Set(),
-    };
+    const player = { token: crypto.randomUUID(), id: randomHex(4), isGM: !!isGM, char };
     this.players.set(player.token, player);
     if (!this.hostToken) this.hostToken = player.token;
     return { player };
@@ -161,6 +192,7 @@ class Room {
     if (type === 'say' && vol && vol !== 'say') m.vol = vol;
     this.state.log.push(m);
     this.fresh.push(m);
+    this.unsaved.push(m);
   }
   canSee(player, m) {
     return player.isGM || m.global || !!m.heard?.[player.id];
@@ -181,7 +213,9 @@ class Room {
   /* ---------- 전송 ---------- */
   send(player, obj) {
     const data = JSON.stringify(obj);
-    for (const ws of player.sockets) if (ws.readyState === 1) ws.send(data);
+    for (const ws of this.io.socketsOf(player.token)) {
+      try { ws.send(data); } catch { /* 닫히는 중인 소켓 */ }
+    }
   }
   sendLog(player) {
     if (!this.state) return this.send(player, { t: 'log', msgs: [] });
@@ -191,7 +225,7 @@ class Room {
     const fresh = this.fresh;
     this.fresh = [];
     for (const p of this.players.values()) {
-      if (!p.sockets.size) continue;
+      if (!this.online(p)) continue;
       this.send(p, { t: 'view', view: this.view(p) });
       const msgs = fresh.filter((m) => this.canSee(p, m)).map((m) => this.msgFor(p, m));
       if (msgs.length) this.send(p, { t: 'msgs', msgs });
@@ -201,7 +235,7 @@ class Room {
   /* ---------- 화면 정보 ---------- */
   view(p) {
     const players = [...this.players.values()].map((x) => ({
-      id: x.id, isGM: x.isGM, char: x.char, online: x.sockets.size > 0, host: x.token === this.hostToken,
+      id: x.id, isGM: x.isGM, char: x.char, online: this.online(x), host: x.token === this.hostToken,
     }));
     const base = {
       phase: this.phase,
@@ -530,4 +564,3 @@ class Room {
   }
 }
 
-module.exports = { Room, SCENARIO_LIST };
