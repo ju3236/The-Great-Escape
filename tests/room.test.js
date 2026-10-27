@@ -280,3 +280,19 @@ test('게임 화면의 출연진 정보에도 그림 id가 들어간다', () => 
   start(env, ['a']);
   assert.deepEqual(env.room.view(env.players[0]).cast[0].img, { id: '0123456789abcdef', a: true, b: true });
 });
+
+test('자물쇠 창을 열어 둔 사이 다른 사람이 풀면 창을 닫으라고 알린다', () => {
+  const env = setup(['가', '나', '다']);
+  start(env, ['a', 'a', 'c']);
+  const [p1, p2, p3] = env.players;
+  env.room.handle(p1, { t: 'interact', obj: 'lockA' });
+  assert.ok(env.sock(p1).sent.some((m) => m.t === 'lock'));
+  env.room.handle(p2, { t: 'guess', obj: 'lockA', value: 'SECRETANSWER' });
+  assert.ok(env.sock(p1).sent.some((m) => m.t === 'lockDone' && m.obj === 'lockA'), '같은 구역 사람에게 알린다');
+  assert.ok(!env.sock(p3).sent.some((m) => m.t === 'lockDone'), '다른 구역에는 알리지 않는다');
+  env.sock(p1).sent = [];
+  const t0 = env.room.timeLeft();
+  env.room.handle(p1, { t: 'guess', obj: 'lockA', value: 'WRONG' });
+  assert.ok(env.sock(p1).sent.some((m) => m.t === 'lockDone'), '늦게 낸 답에도 이미 열렸다고 알린다');
+  assert.ok(t0 - env.room.timeLeft() < 2_000, '이미 열린 자물쇠에 낸 답으로 시간이 줄지 않는다');
+});

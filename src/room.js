@@ -693,7 +693,15 @@ export class Room {
 
   guess(c, objId, raw) {
     const obj = this.findObj(c, objId);
-    if (!obj?.lock || this.objDone(obj) || this.state.over) return null;
+    const player = this.playerById(c.id);
+    if (!obj?.lock) {
+      this.send(player, { t: 'lockDone', obj: objId, text: '그 자물쇠는 이제 손이 닿지 않는 곳에 있다.' });
+      return null;
+    }
+    if (this.objDone(obj) || this.state.over) {
+      this.send(player, { t: 'lockDone', obj: objId, text: '이미 누군가 열었다.' });
+      return null;
+    }
     if ((obj.needItem && !this.state.inv[c.id].includes(obj.needItem)) || this.blocked(c, obj)) return null;
     const value = str(raw, 20);
     if (!value) return null;
@@ -727,6 +735,10 @@ export class Room {
     s.solved.push(obj.id);
     s.lastProgress = Date.now();
     s.hintVotes = [];
+    // 같은 구역에서 이 자물쇠 창을 열어 둔 사람의 창을 닫는다
+    for (const m of this.membersIn(here)) {
+      if (m.id !== c.id) this.send(this.playerById(m.id), { t: 'lockDone', obj: obj.id, text: `${josa(c.name, '이', '가')} 먼저 풀었다.` });
+    }
     if (obj.needItem && !obj.keepItem) s.inv[c.id] = s.inv[c.id].filter((i) => i !== obj.needItem);
     this.post({ type: 'narr', text: r.text, room: here, sfx: r.item ? 'item' : r.unlock ? 'unlock' : 'solve' });
     if (r.unlock && !s.unlocked.includes(r.unlock)) s.unlocked.push(r.unlock);

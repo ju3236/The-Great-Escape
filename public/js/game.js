@@ -263,7 +263,8 @@ function importCharacters(list) {
   for (const c of list) {
     if (!c || typeof c.name !== 'string' || !c.name.trim()) continue;
     const same = characters.findIndex((x) => x.id === c.id && x.name === c.name);
-    if (same >= 0) { characters[same] = c; continue; }
+    // 이미 있는 캐릭터는 새 정보로 덮되, 가져온 쪽에 없는 그림은 내 기기 것을 남긴다
+    if (same >= 0) { characters[same] = { ...characters[same], ...c }; continue; }
     c.id = c.id && !characters.some((x) => x.id === c.id) ? c.id : 'c' + Math.random().toString(36).slice(2);
     characters.push(c);
   }
@@ -274,10 +275,14 @@ function importCharacters(list) {
 const CODE_PREFIX = 'TGE1:';
 $('#btn-copy-chars').addEventListener('click', async () => {
   if (!characters.length) return toast('복사할 캐릭터가 없어요.');
-  const code = CODE_PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(characters))));
+  // 그림까지 넣으면 코드가 너무 길어져서 붙여 넣기가 잘리므로 그림은 뺀다
+  const hasArt = characters.some((c) => c.avatar || c.body);
+  const plain = characters.map(({ avatar: _a, body: _b, ...rest }) => rest);
+  const code = CODE_PREFIX + btoa(unescape(encodeURIComponent(JSON.stringify(plain))));
+  const note = hasArt ? ' 그림은 코드에 들어가지 않아요. 그림까지 옮기려면 "파일로 내보내기"를 쓰세요.' : '';
   try {
     await navigator.clipboard.writeText(code);
-    toast('캐릭터 코드를 복사했어요. 다른 기기에서 "코드 붙여넣기"를 누르세요.');
+    toast(`캐릭터 코드를 복사했어요. 다른 기기에서 "코드 붙여넣기"를 누르세요.${note}`);
   } catch {
     prompt('이 코드를 복사해서 다른 기기에 붙여 넣으세요', code);
   }
@@ -388,6 +393,10 @@ function onServer(msg) {
     }
     case 'lock':
       openLock(msg.obj);
+      break;
+    case 'lockDone':
+      if (lockDlg.open && lockObj?.id === msg.obj) lockDlg.close();
+      toast(msg.text);
       break;
     case 'effect':
       playEffect(msg.name);
