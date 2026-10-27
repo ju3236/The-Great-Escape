@@ -505,12 +505,22 @@ function showOnlineError(text) {
 
 function renderEpisodes() {
   const sel = $('#episode-select');
-  sel.innerHTML = scenarios.map((s) => `<option value="${esc(s.id)}">${esc(s.title)}</option>`).join('');
-  $('#episode-desc').textContent = scenarios[0]?.summary || '';
+  sel.innerHTML = scenarios.map((s) => `<option value="${esc(s.id)}">${esc(s.title)}${s.info ? ` ${'★'.repeat(s.info.difficulty)}` : ''}</option>`).join('');
+  renderEpisodeInfo(scenarios[0]);
 }
-$('#episode-select').addEventListener('change', (e) => {
-  $('#episode-desc').textContent = scenarios.find((s) => s.id === e.target.value)?.summary || '';
-});
+// 고른 에피소드의 난이도·예상 시간·추천 인원과 소개
+function renderEpisodeInfo(s) {
+  const i = s?.info;
+  $('#episode-info').hidden = !i;
+  if (i) {
+    $('#episode-info').innerHTML = `
+      <span title="난이도 ${i.difficulty} / 5">난이도 <b class="stars">${'★'.repeat(i.difficulty)}<i>${'★'.repeat(5 - i.difficulty)}</i></b></span>
+      <span>${pix('hourglass', 12)} ${esc(i.minutes)}</span>
+      <span>${pix('pin', 12)} 추천 ${esc(i.players)}</span>`;
+  }
+  $('#episode-desc').textContent = s?.summary || '';
+}
+$('#episode-select').addEventListener('change', (e) => renderEpisodeInfo(scenarios.find((s) => s.id === e.target.value)));
 
 // 캐릭터 고르기 목록 (참가 화면, 대기실 공용)
 function pickListHtml(selected) {

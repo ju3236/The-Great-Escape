@@ -3,7 +3,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { Room, SCENARIO_LIST } from './room.js';
 
-const ROOM_TTL = 6 * 60 * 60 * 1000; // 아무도 접속하지 않은 방은 6시간 뒤 정리
+const ROOM_TTL = 7 * 24 * 60 * 60 * 1000; // 아무도 접속하지 않은 방은 7일 뒤 정리 (긴 에피소드를 며칠에 나눠 할 수 있게)
 const MAX_MESSAGE = 600 * 1024; // 캐릭터 그림이 실려 올 수 있다
 const MAX_IMAGE = 300 * 1024; // 그림 한 장(data URL 문자열) 최대 길이
 const IMAGE_RE = /^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/;
