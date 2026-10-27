@@ -375,6 +375,9 @@ function onServer(msg) {
       session = { code: msg.code, token: msg.token };
       store(SESSION_KEY, session);
       break;
+    case 'fullLog':
+      fullLogWait?.(msg.msgs);
+      break;
     case 'log':
       log = msg.msgs;
       if (screen === 'game') renderLog();
@@ -976,7 +979,7 @@ function renderChannels() {
     occupied.map((r) => `<button data-ch="${r.id}" class="${gmRoom === r.id ? 'on' : ''}">${esc(r.name)} <small>${r.tokens.length}</small></button>`).join('') +
     SAVE_LOG_BUTTON;
 }
-const SAVE_LOG_BUTTON = '<button type="button" class="save-log" data-savelog title="지금까지의 역극 로그를 HTML 파일로 저장">로그 저장</button>';
+const SAVE_LOG_BUTTON = '<button type="button" class="save-log" data-savelog title="지금까지 내 캐릭터가 본 로그를 HTML 파일로 저장 (게임이 끝나면 모든 사람의 로그가 저장돼요)">로그 저장</button>';
 $('#channels').addEventListener('click', (e) => {
   const b = e.target.closest('[data-ch]');
   if (!b) return;
@@ -1066,6 +1069,18 @@ async function toDataUrl(url) {
     return null;
   }
 }
+// 게임이 끝났으면 모든 사람의 기록을 받아 온다. 진행 중에는 내가 본 것만.
+let fullLogWait = null;
+function exportLog() {
+  if (view.phase !== 'ended' && !isGM()) return Promise.resolve({ msgs: log, full: false });
+  return new Promise((resolve) => {
+    const done = (msgs) => { clearTimeout(timer); fullLogWait = null; resolve(msgs ? { msgs, full: true } : { msgs: log, full: false }); };
+    const timer = setTimeout(() => done(null), 5000);
+    fullLogWait = done;
+    send({ t: 'fullLog' });
+  });
+}
+const onlyTag = (m) => (m.only && castById(m.only) ? `${castById(m.only).name}만 봄` : '');
 let savingLog = false;
 async function saveHtmlLog() {
   if (!view || savingLog) return;
@@ -1077,13 +1092,14 @@ async function saveHtmlLog() {
     await Promise.all(view.cast.map(async (c) => {
       art[c.id] = { a: await toDataUrl(imgUrl(c, 'a') || c.image), b: await toDataUrl(imgUrl(c, 'b')) };
     }));
-    download(`${logFileName()}.html`, buildHtmlLog(art), 'text/html');
-    toast('HTML 로그를 저장했어요. 파일을 열면 브라우저에서 볼 수 있어요.');
+    const { msgs, full } = await exportLog();
+    download(`${logFileName()}.html`, buildHtmlLog(art, msgs, full), 'text/html');
+    toast(full ? '모든 사람의 로그를 HTML로 저장했어요.' : '내 캐릭터가 본 로그를 저장했어요. 게임이 끝나면 모든 사람의 로그를 저장할 수 있어요.');
   } finally {
     savingLog = false;
   }
 }
-function buildHtmlLog(art) {
+function buildHtmlLog(art, msgs = log, full = false) {
   const face = (c, cls = '') => {
     const src = art[c.id]?.a;
     const inner = src ? `<img src="${src}" alt="">` : spriteSvg(c.sprite, c.color, 40);
@@ -1093,13 +1109,13 @@ function buildHtmlLog(art) {
   const roomNames = Object.fromEntries((view.map?.rooms || []).filter((r) => r.name).map((r) => [r.id, r.name]));
   for (const [id, r] of Object.entries(view.rooms || {})) roomNames[id] = r.name;
   const place = (m) => m.tag || (m.room && roomNames[m.room]) || '';
-  const viewer = isGM() ? '진행자 시점 (모든 구역)' : `${myIds().map((id) => who(id).name).join(', ')} 시점`;
+  const viewer = full ? '모든 사람의 기록 (모든 구역)' : isGM() ? '진행자 시점 (모든 구역)' : `${myIds().map((id) => who(id).name).join(', ')} 시점`;
   const result = view.phase === 'ended'
     ? (view.result === 'escape' ? `탈출 성공 · 소요 시간 ${fmt(view.time.elapsed)}` : `탈출 실패${view.endText ? ` — ${view.endText}` : ''}`)
     : `진행 중 · 흐른 시간 ${fmt(view.time.elapsed)}`;
 
   let lastPlace = '';
-  const rows = log.map((m) => {
+  const rows = msgs.map((m) => {
     const where = place(m);
     // 장소가 바뀌면 구분선을 넣는다 (전체 메시지는 그대로)
     let sep = '';
@@ -1107,7 +1123,8 @@ function buildHtmlLog(art) {
       sep = `<div class="place">${pix('pin', 12)} ${esc(where)}</div>`;
       lastPlace = where;
     }
-    const by = !isGM() && myIds().length > 1 && m.by && !m.global ? `<span class="by">${esc(who(m.by).name)}</span>` : '';
+    const by = full ? (onlyTag(m) ? `<span class="by">${esc(onlyTag(m))}</span>` : '')
+      : !isGM() && myIds().length > 1 && m.by && !m.global ? `<span class="by">${esc(who(m.by).name)}</span>` : '';
     let body;
     if (m.type === 'muffled') {
       body = `<div class="m muffled"><span class="from">${pix('door', 14, MUFFLED)} ${esc(m.from ? `${m.from} 쪽` : '어딘가')}에서 웅얼거리는 소리 ${by}</span><p>${esc(m.text)}</p></div>`;
@@ -1199,11 +1216,11 @@ ${rows}
 `;
 }
 
-function logAsText() {
-  const who = isGM() ? '진행자 시점' : `${myIds().map((id) => castById(id).name).join(', ')} 시점`;
+function logAsText(msgs = log, full = false) {
+  const who = full ? '모든 사람의 기록' : isGM() ? '진행자 시점' : `${myIds().map((id) => castById(id).name).join(', ')} 시점`;
   const lines = [view.scenario.title, `출연: ${view.cast.map((c) => c.name).join(', ')}`, `(${who})`, ''];
-  for (const m of log) {
-    const where = m.tag ? `[${m.tag}] ` : '';
+  for (const m of msgs) {
+    const where = (m.tag ? `[${m.tag}] ` : '') + (full && onlyTag(m) ? `(${onlyTag(m)}) ` : '');
     const c = m.charId && castById(m.charId);
     if (m.type === 'muffled') lines.push(`(${m.from || '어딘가'}에서 웅얼거리는 소리) ${m.text}`);
     else if (m.type === 'npc') lines.push(`${where}${m.speaker}: "${m.text}"`);
@@ -1404,7 +1421,10 @@ function showEnding() {
   show('ending');
 }
 $('#btn-save-log').addEventListener('click', () => saveHtmlLog());
-$('#btn-save-txt').addEventListener('click', () => download(`${logFileName()}.txt`, logAsText()));
+$('#btn-save-txt').addEventListener('click', async () => {
+  const { msgs, full } = await exportLog();
+  download(`${logFileName()}.txt`, logAsText(msgs, full));
+});
 document.addEventListener('click', (e) => { if (e.target.closest('[data-savelog]')) saveHtmlLog(); });
 $('#btn-ending-title').addEventListener('click', () => {
   dropSession();

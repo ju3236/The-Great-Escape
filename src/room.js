@@ -492,7 +492,7 @@ export class Room {
   msgFor(player, m) {
     const base = { id: m.id, icon: m.icon, sfx: m.sfx };
     if (player.isGM) {
-      return { ...base, type: m.type, text: m.text, charId: m.charId, speaker: m.speaker, vol: m.vol, global: m.global, tag: m.global ? null : this.room(m.room).name, room: m.room };
+      return { ...base, type: m.type, text: m.text, charId: m.charId, speaker: m.speaker, vol: m.vol, global: m.global, tag: m.global ? null : this.room(m.room).name, room: m.room, only: m.only };
     }
     if (m.global) return { ...base, type: m.type, text: m.text, speaker: m.speaker, global: true };
     const [quality, at, by] = this.heardBy(player, m);
@@ -514,6 +514,14 @@ export class Room {
   sendLog(player) {
     if (!this.state) return this.send(player, { t: 'log', msgs: [] });
     this.send(player, { t: 'log', msgs: this.state.log.filter((m) => this.canSee(player, m)).map((m) => this.msgFor(player, m)) });
+  }
+  // 모든 사람의 기록(진행자 시점). 혼자 본 단서가 새지 않게 게임이 끝난 뒤에만 준다.
+  sendFullLog(player) {
+    if (!this.state) return null;
+    if (this.phase !== 'ended' && !player.isGM) return '모든 사람의 로그는 게임이 끝난 뒤에 저장할 수 있어요.';
+    const gm = { isGM: true };
+    this.send(player, { t: 'fullLog', msgs: this.state.log.map((m) => this.msgFor(gm, m)) });
+    return null;
   }
   flush() {
     const fresh = this.fresh;
@@ -679,6 +687,7 @@ export class Room {
       if (msg.t === 'leave') return this.leave(player);
       return null;
     }
+    if (msg.t === 'fullLog') return this.sendFullLog(player);
     if (this.phase !== 'play') return null;
 
     if (player.isGM) {
