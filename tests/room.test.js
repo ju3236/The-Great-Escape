@@ -497,19 +497,6 @@ test('조사 결과는 조사한 캐릭터에게만, 같은 방 사람에게는 
   assert.ok(!seen(p2).includes('C'), '처음 들어간 방 설명도 들어간 사람만 본다');
 });
 
-test('다른 사람이 일으킨 이벤트 나레이션은 나에게 안 보인다', () => {
-  const env = setup(['가', '나']);
-  start(env, ['a', 'b']);
-  env.room.state.unlocked.push('ab');
-  const [p1, p2] = env.players;
-  env.room.handle(p1, { t: 'move', to: 'b' });
-  const seen = (p) => received(env, p).map((m) => m.text);
-  assert.ok(seen(p1).includes('가이 B에 처음 들어왔다'));
-  assert.ok(!seen(p2).includes('가이 B에 처음 들어왔다'), '같은 방에 있어도 안 보인다');
-  env.room.handle(p1, { t: 'interact', obj: 'box' });
-  assert.ok(!env.sock(p2).sent.some((m) => m.t === 'effect'), '화면 효과도 조사한 사람만');
-});
-
 test('분위기 연출은 기본으로 꺼져 있고, 켜면 시간이 지나 저절로 나온다', () => {
   const off = setup(['가']);
   start(off, ['a']);

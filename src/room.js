@@ -12,7 +12,6 @@ const WRONG_COST = 60; // 제한 시간이 있을 때 오답이 깎는 시간(�
 const ATTACK_WRONG_COST = 10; // 타임어택 중 오답이 깎는 시간(초)
 const MAX_CAST = 6;
 const MAX_TEXT = 300;
-const PERSONAL_EVENTS = ['inspect', 'solve', 'item', 'enter']; // 캐릭터 한 명의 행동이 일으키는 이벤트
 const PIN_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 // 속삭임: 같은 구역만 / 대사: 옆 구역 웅얼 / 외침: 옆 구역 또렷, 두 칸 웅얼
@@ -303,9 +302,7 @@ export class Room {
       if (s.over || ev.on !== on || (!ev.repeat && s.fired.includes(ev.id))) continue;
       if (!this.eventMatches(ev, ctx)) continue;
       if (!s.fired.includes(ev.id)) s.fired.push(ev.id);
-      // 누군가 직접 한 행동(조사·풀기·획득·이동)에서 나온 연출은 그 캐릭터에게만 보인다
-      const personal = ctx.char && PERSONAL_EVENTS.includes(on);
-      this.runActions(ev.do, personal ? { ...ctx, personal: true } : ctx);
+      this.runActions(ev.do, ctx);
     }
   }
   eventMatches(ev, ctx) {
@@ -333,8 +330,7 @@ export class Room {
       // to: 'here'(조건이 일어난 구역, 기본값) / 'all'(전체) / 구역 id
       const to = act.to || (ctx.room ? 'here' : 'all');
       const where = to === 'all' ? null : to === 'here' ? ctx.room : to;
-      const mine = ctx.personal && !act.to;
-      const target = mine ? { only: ctx.char.id } : where ? { room: where } : { global: true };
+      const target = where ? { room: where } : { global: true };
       if (act.narr) this.post({ type: 'narr', text: fill(act.narr), ...target });
       if (act.sys) this.post({ type: 'sys', text: fill(act.sys), icon: act.icon, ...target });
       if (act.voice) this.post({ type: 'npc', text: fill(act.voice), speaker: act.speaker || '???', sfx: 'voice', ...target });
@@ -352,7 +348,7 @@ export class Room {
         const h = this.scenario.hints.find((x) => !this.isDone(x.until));
         if (h) this.post({ type: 'sys', text: `${act.hint === true ? '힌트' : act.hint}: ${h.text}`, global: true, icon: 'bulb' });
       }
-      if (act.effect) mine ? this.effectFor(ctx.char.id, act.effect) : this.effect(act.effect, where);
+      if (act.effect) this.effect(act.effect, where);
       // 타임어택에 실패한 캐릭터들을 다른 구역으로 끌고 간다
       if (act.moveTo && ctx.who) {
         for (const id of ctx.who) {
@@ -374,9 +370,6 @@ export class Room {
     }
   }
 
-  effectFor(charId, name) {
-    for (const p of this.players.values()) if (p.isGM || this.ownerOf(charId)?.id === p.id) this.send(p, { t: 'effect', name });
-  }
   // 시간이 흐르면 저절로 나오는 분위기 연출(문·타임어택 같은 진행 변화가 없는 것)
   flavor(ev) {
     return ev.do.every((a) => !['lock', 'release', 'unlock', 'attack', 'time', 'gameover', 'moveTo', 'hint'].some((k) => a[k]));
