@@ -380,6 +380,7 @@ function onServer(msg) {
       log.push(...msg.msgs);
       if (screen === 'game') {
         msg.msgs.forEach((m) => { if (gmShows(m)) appendMsg(m); });
+        renderRoomLog();
         msg.msgs.forEach((m) => {
           if (m.sfx) Sound.play(m.sfx);
           else if (m.type === 'say' && m.charId !== view?.me.id) Sound.play('talk');
@@ -463,8 +464,14 @@ function route(prev) {
 }
 
 /* ---------------- 방 만들기 / 참가 ---------------- */
-let pickedChar = store(LAST_CHAR_KEY);
+// 데려갈 캐릭터들 (한 사람이 여러 명을 데려갈 수 있다)
+const MAX_CAST = 6;
+let pickedChars = (() => {
+  const v = store(LAST_CHAR_KEY);
+  return Array.isArray(v) ? v : v ? [v] : [];
+})();
 const role = () => document.querySelector('[name=role]:checked').value;
+const charNames = (list) => list.map((c) => c.name).join(', ');
 
 $('#btn-online').addEventListener('click', () => show('online'));
 $('#btn-chars').addEventListener('click', () => show('chars'));
@@ -499,28 +506,40 @@ $('#episode-select').addEventListener('change', (e) => {
   $('#episode-desc').textContent = scenarios.find((s) => s.id === e.target.value)?.summary || '';
 });
 
+// 캐릭터 고르기 목록 (참가 화면, 대기실 공용)
+function pickListHtml(selected) {
+  return characters.map((c) => `
+    <li data-pick="${c.id}" class="${selected.includes(c.id) ? 'on' : ''}">
+      ${avatar(c)}
+      <div class="info"><strong>${esc(c.name)}</strong><small>${PERSONALITIES[c.personality]?.label} · ${SKILLS[c.skill]?.label}</small></div>
+    </li>`).join('');
+}
+function togglePick(list, id) {
+  if (list.includes(id)) return list.filter((x) => x !== id);
+  if (list.length >= MAX_CAST) { toast(`한 번에 최대 ${MAX_CAST}명까지 데려갈 수 있어요.`); return list; }
+  return [...list, id];
+}
+
 function renderOnline() {
   loadScenarios();
   $('#online-error').hidden = true;
   const gm = role() === 'gm';
   $('#role-desc').textContent = gm
     ? '진행자는 캐릭터 없이 모든 구역을 지켜보고, 원하는 구역에 나레이션을 넣고, 시간을 멈출 수 있어요.'
-    : '내 캐릭터 하나를 데리고 들어가요. 내 캐릭터가 듣고 볼 수 있는 것만 화면에 나와요.';
+    : '내 캐릭터를 한 명 이상 데리고 들어가요. 여러 명을 데려가면 게임 중에 왼쪽 목록에서 바꿔 가며 굴릴 수 있어요.';
   $('#pick-wrap').hidden = gm;
-  if (!characters.some((c) => c.id === pickedChar)) pickedChar = characters[0]?.id || null;
+  pickedChars = pickedChars.filter((id) => characters.some((c) => c.id === id));
+  if (!pickedChars.length && characters.length) pickedChars = [characters[0].id];
   $('#pick-empty').hidden = characters.length > 0;
-  $('#pick-list').innerHTML = characters.map((c) => `
-    <li data-pick="${c.id}" class="${c.id === pickedChar ? 'on' : ''}">
-      ${avatar(c)}
-      <div class="info"><strong>${esc(c.name)}</strong><small>${PERSONALITIES[c.personality]?.label} · ${SKILLS[c.skill]?.label}</small></div>
-    </li>`).join('');
+  $('#pick-list').innerHTML = pickListHtml(pickedChars);
+  $('#pick-count').textContent = characters.length ? `${pickedChars.length}명 고름` : '';
 }
 document.querySelectorAll('[name=role]').forEach((r) => r.addEventListener('change', renderOnline));
 $('#pick-list').addEventListener('click', (e) => {
   const li = e.target.closest('[data-pick]');
   if (!li) return;
-  pickedChar = li.dataset.pick;
-  store(LAST_CHAR_KEY, pickedChar);
+  pickedChars = togglePick(pickedChars, li.dataset.pick);
+  store(LAST_CHAR_KEY, pickedChars);
   renderOnline();
 });
 ['#join-code', '#resume-code', '#resume-pin'].forEach((sel) => $(sel).addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase(); }));
@@ -539,12 +558,12 @@ $('#btn-resume-pin').addEventListener('click', () => {
 
 function joinPayload() {
   const gm = role() === 'gm';
-  const c = characters.find((x) => x.id === pickedChar);
-  if (!gm && !c) {
+  const chars = pickedChars.map((id) => characters.find((c) => c.id === id)).filter(Boolean);
+  if (!gm && !chars.length) {
     showOnlineError('데려갈 캐릭터를 골라 주세요.');
     return null;
   }
-  return { gm, char: gm ? null : c };
+  return { gm, chars: gm ? [] : chars };
 }
 $('#btn-create').addEventListener('click', async (e) => {
   const p = joinPayload();
@@ -581,18 +600,20 @@ function renderLobby() {
   $('#lobby-ep').textContent = view.scenario.title;
   $('#lobby-summary').textContent = view.scenario.summary;
   $('#lobby-players').innerHTML = view.players.map((p) => {
-    const face = p.isGM ? `<span class="avatar gm">${pix('monitor', 28)}</span>` : avatar(p.char);
+    const faces = p.isGM ? `<span class="avatar gm">${pix('monitor', 28)}</span>` : `<span class="faces">${p.chars.map((c) => avatar(c)).join('')}</span>`;
     const tags = [p.host && '방장', p.isGM && '진행자', p.id === view.me.id && '나'].filter(Boolean)
       .map((t) => `<span class="badge">${t}</span>`).join('');
     const kick = canKick(p.id, p.online) ? `<button class="kick" data-kick="${p.id}">내보내기</button>` : '';
-    return `<li class="${p.online ? '' : 'offline'}">${face}
-      <div class="info"><strong>${p.isGM ? '진행자' : esc(p.char.name)} ${tags}</strong>
-      <small>${p.isGM ? '모든 구역을 지켜본다' : `${PERSONALITIES[p.char.personality]?.label} · ${SKILLS[p.char.skill]?.label}`}</small></div>
+    const sub = p.isGM ? '모든 구역을 지켜본다'
+      : p.chars.map((c) => `${esc(c.name)} (${SKILLS[c.skill]?.label})`).join(' · ');
+    return `<li class="${p.online ? '' : 'offline'}">${faces}
+      <div class="info"><strong>${p.isGM ? '진행자' : esc(charNames(p.chars))} ${tags}</strong><small>${sub}</small></div>
       ${kick}<span class="dot ${p.online ? 'on' : ''}" title="${p.online ? '접속 중' : '연결 끊김'}"></span></li>`;
   }).join('');
   $('#btn-change-char').hidden = view.me.isGM;
   renderOptions('#lobby-options');
-  const castCount = view.players.filter((p) => !p.isGM).length;
+  const castCount = view.players.reduce((n, p) => n + (p.chars?.length || 0), 0);
+  $('#lobby-count').textContent = `캐릭터 ${castCount} / ${MAX_CAST}명`;
   $('#btn-lobby-start').hidden = !view.me.isHost;
   $('#btn-lobby-start').disabled = castCount === 0;
   $('#lobby-wait').hidden = view.me.isHost;
@@ -607,17 +628,23 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-kick]');
   if (!b || !view) return;
   const p = view.players.find((x) => x.id === b.dataset.kick);
-  const name = p?.isGM ? '진행자' : p?.char?.name || '이 멤버';
+  const name = p?.isGM ? '진행자' : charNames(p?.chars || []) || '이 멤버';
   if (confirm(`${name}을(를) 방에서 내보낼까요? 다시 들어오려면 새로 참가해야 해요.`)) send({ t: 'kick', id: b.dataset.kick });
 });
 
 // 방 설정: 방장은 바꾸고, 다른 사람은 지금 상태를 본다
 function renderOptions(sel) {
-  const on = !!view.options?.autoHint;
-  const desc = '5분 동안 아무 퍼즐도 못 풀면 힌트가 자동으로 나와요 (시간은 안 줄어요).';
-  $(sel).innerHTML = view.me.isHost
-    ? `<label class="check"><input type="checkbox" data-option="autoHint" ${on ? 'checked' : ''}> 자동 힌트</label><p class="muted small">${desc}</p>`
-    : `<p class="small">자동 힌트: <b>${on ? '켜짐' : '꺼짐'}</b></p><p class="muted small">${desc} 방장이 바꿀 수 있어요.</p>`;
+  const o = view.options || {};
+  const host = view.me.isHost;
+  const minutes = Math.round((view.scenario.timeLimit || 0) / 60);
+  const lobby = view.phase === 'lobby';
+  const row = (key, label, desc, canChange) => (host && canChange
+    ? `<label class="check"><input type="checkbox" data-option="${key}" ${o[key] ? 'checked' : ''}> ${label}</label><p class="muted small">${desc}</p>`
+    : `<p class="small">${label}: <b>${o[key] ? '켜짐' : '꺼짐'}</b></p><p class="muted small">${desc}${host ? '' : ' 방장이 바꿀 수 있어요.'}</p>`);
+  $(sel).innerHTML = [
+    minutes ? row('timeLimit', `제한 시간 ${minutes}분`, lobby ? '켜면 전체 제한 시간이 생기고, 오답과 힌트에 시간이 줄어요. 끄면 시간 제한 없이 하다가 중간중간 타임어택만 나와요.' : '녹화 중에는 바꿀 수 없어요.', lobby) : '',
+    row('autoHint', '자동 힌트', '5분 동안 아무 퍼즐도 못 풀면 힌트가 자동으로 나와요.', true),
+  ].join('');
 }
 document.addEventListener('change', (e) => {
   const box = e.target.closest('[data-option]');
@@ -625,20 +652,26 @@ document.addEventListener('change', (e) => {
 });
 
 const charDlg = $('#char-dialog');
+let dialogPicks = [];
 $('#btn-change-char').addEventListener('click', () => {
-  $('#char-choices').innerHTML = characters.map((c) => `
-    <li data-choose="${c.id}">${avatar(c)}<div class="info"><strong>${esc(c.name)}</strong>
-    <small>${PERSONALITIES[c.personality]?.label} · ${SKILLS[c.skill]?.label}</small></div></li>`).join('')
-    || '<li class="muted">캐릭터 관리에서 먼저 캐릭터를 만들어 주세요.</li>';
+  const mine = view.players.find((p) => p.id === view.me.id);
+  dialogPicks = pickedChars.filter((id) => characters.some((c) => c.id === id));
+  if (!dialogPicks.length && mine) dialogPicks = characters.filter((c) => mine.chars.some((m) => m.name === c.name)).map((c) => c.id);
+  $('#char-choices').innerHTML = pickListHtml(dialogPicks) || '<li class="muted">캐릭터 관리에서 먼저 캐릭터를 만들어 주세요.</li>';
   charDlg.showModal();
 });
 $('#char-choices').addEventListener('click', (e) => {
-  const li = e.target.closest('[data-choose]');
+  const li = e.target.closest('[data-pick]');
   if (!li) return;
-  const c = characters.find((x) => x.id === li.dataset.choose);
-  pickedChar = c.id;
-  store(LAST_CHAR_KEY, c.id);
-  send({ t: 'setChar', char: c });
+  dialogPicks = togglePick(dialogPicks, li.dataset.pick);
+  $('#char-choices').innerHTML = pickListHtml(dialogPicks);
+});
+$('#char-choices-ok').addEventListener('click', () => {
+  const chars = dialogPicks.map((id) => characters.find((c) => c.id === id)).filter(Boolean);
+  if (!chars.length) return toast('캐릭터를 한 명 이상 골라 주세요.');
+  pickedChars = dialogPicks;
+  store(LAST_CHAR_KEY, pickedChars);
+  send({ t: 'setChar', chars });
   charDlg.close();
 });
 $('#btn-leave').addEventListener('click', () => {
@@ -660,12 +693,11 @@ function playIntro() {
   $('#intro-ep').textContent = view.scenario.title;
   const box = $('#intro-text');
   box.innerHTML = '';
-  const me = castById(view.me.id);
+  const shown = view.me.isGM ? view.cast : myIds().map(castById);
   const lines = [
     ...view.scenario.intro.map(esc),
-    ...(view.me.isGM
-      ? view.cast.map((c) => `${avatar(c, 'sm')} <b>${esc(c.name)}</b> — ${esc(c.roomName)}에서 눈을 떴다.`)
-      : [`${avatar(me, 'sm')} <b>${esc(me.name)}</b> — ${esc(me.roomName)}에서 눈을 떴다. 다른 멤버들은 보이지 않는다.`]),
+    ...shown.map((c) => `${avatar(c, 'sm')} <b>${esc(c.name)}</b> — ${esc(c.roomName)}에서 눈을 떴다.`),
+    ...(view.me.isGM ? [] : ['다른 멤버들은 보이지 않는다.']),
   ];
   const next = () => {
     if (i < lines.length) {
@@ -693,15 +725,31 @@ const VOLUME_DESC = {
 const MODE_LABEL = { say: '대사', whisper: '속삭임', shout: '외침', act: '행동', narr: '나레이션' };
 const MUFFLED = { o: '#3d3f37', b: '#24251f', y: '#5f6157' };
 let gmRoom = null; // 진행자가 보고 있는 구역 (채널과 구역 패널)
+let activeChar = null; // 지금 행동하는 내 캐릭터
 
 const isGM = () => view?.me.isGM;
 const castById = (id) => view?.cast?.find((c) => c.id === id) || { id, name: '???', color: '#555555', sprite: 'short' };
-const myChar = () => (isGM() ? null : castById(view.me.id));
+const isMine = (id) => !!view?.me.chars?.includes(id);
+const myIds = () => (view?.me.chars || []).filter((id) => view?.cast?.some((c) => c.id === id && !c.gone));
+const myChar = () => (isGM() ? null : castById(activeChar));
+function ensureActive() {
+  const ids = myIds();
+  if (!ids.includes(activeChar)) activeChar = ids[0] || null;
+}
+function switchChar(id) {
+  if (!isMine(id) || id === activeChar) return;
+  activeChar = id;
+  renderGame();
+  toast(`${josa(castById(id).name, '으로', '로')} 행동해요.`);
+}
+const fmt = (ms) => {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
+};
 
 function renderAll() {
   $('#ep-name').textContent = view.scenario.title;
   $('#btn-pause').hidden = !isGM();
-  $('#btn-hint').textContent = isGM() ? '힌트 주기' : '힌트 (-3분)';
   $('#rp-mode').innerHTML = (isGM() ? ['narr'] : ['say', 'whisper', 'shout', 'act'])
     .map((m) => `<option value="${m}">${MODE_LABEL[m]}</option>`).join('');
   $('#rp-text').placeholder = isGM() ? '상황을 묘사하거나 돌발 이벤트를 알려 주세요' : '캐릭터로 말하거나 행동해 보세요';
@@ -710,67 +758,89 @@ function renderAll() {
 }
 
 function renderGame() {
-  if (isGM() && !gmRoom) gmRoom = null;
+  ensureActive();
   renderClock();
   renderTeam();
   renderMap();
   renderRoom();
+  renderRoomLog();
   renderChannels();
   renderInput();
   $('#btn-pause').textContent = view.time.paused ? '재개' : '일시정지';
-  if (!isGM()) {
+  if (isGM()) {
+    $('#btn-hint').textContent = '힌트 주기';
+  } else {
     const h = view.hint;
-    $('#btn-hint').textContent = h.votes ? `힌트 찬성 ${h.votes}/${h.need}` : '힌트 (-3분)';
+    $('#btn-hint').textContent = h.votes ? `힌트 찬성 ${h.votes}/${h.need}` : h.cost ? `힌트 (-${h.cost / 60}분)` : '힌트';
     $('#btn-hint').classList.toggle('voted', h.mine);
   }
   renderOptions('#game-options');
   $('#resume-info').innerHTML = `다른 기기로 이어하기<br>초대 코드 <b>${esc(view.code)}</b> · 복귀 번호 <b>${esc(view.me.pin)}</b>`;
 }
 
-/* 시계: 서버가 알려 준 남은 시간에서 로컬로 센다 */
+/* 시계: 서버가 알려 준 시간에서 로컬로 센다. 제한 시간이 없으면 흐른 시간을 보여 준다. */
 let clockId = null;
 function startClock() { stopClock(); clockId = setInterval(renderClock, 250); }
 function stopClock() { clearInterval(clockId); clockId = null; }
 function renderClock() {
   if (!view?.time) return;
-  const elapsed = view.time.paused ? 0 : performance.now() - viewAt;
-  const t = Math.max(0, Math.ceil((view.time.left - elapsed) / 1000));
+  const dt = view.time.paused || view.over ? 0 : performance.now() - viewAt;
   const el = $('#timer');
-  el.textContent = `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`;
-  el.classList.toggle('danger', t <= 300);
+  if (view.time.limited) {
+    const left = view.time.left - dt;
+    el.textContent = fmt(left);
+    el.classList.toggle('danger', left <= 300_000);
+    el.classList.remove('elapsed');
+    el.title = '남은 시간';
+  } else {
+    el.textContent = fmt(view.time.elapsed + dt);
+    el.classList.remove('danger');
+    el.classList.add('elapsed');
+    el.title = '흐른 시간 (제한 시간 없음)';
+  }
   el.classList.toggle('paused', view.time.paused && !view.over);
+  const banner = $('#attack-banner');
+  const attacks = view.attacks || [];
+  banner.hidden = !attacks.length || view.over;
+  banner.innerHTML = attacks.map((a) => {
+    const left = a.left - dt;
+    return `<div class="attack ${left <= 10_000 ? 'hurry' : ''}">${pix('hourglass', 20)}<span class="label">${esc(a.label)}</span><span class="count">${fmt(left)}</span></div>`;
+  }).join('');
 }
 
 function renderTeam() {
   const online = Object.fromEntries(view.players.map((p) => [p.id, p.online]));
-  $('#team').innerHTML = view.cast.map((c) => {
-    const mine = c.id === view.me.id;
+  const mineFirst = [...view.cast].sort((a, b) => isMine(b.id) - isMine(a.id));
+  $('#team').innerHTML = mineFirst.map((c) => {
+    const mine = isMine(c.id);
     if (c.gone) {
       return `<div class="member gone">${avatar(c)}<div class="m-info"><b>${esc(c.name)}</b><small>방을 떠났다</small></div></div>`;
     }
-    const kick = view.phase === 'play' && canKick(c.id, online[c.id])
-      ? `<button class="kick" data-kick="${c.id}" title="${online[c.id] ? '' : '접속이 끊긴 멤버를 내보내면 탈출할 때 기다리지 않아도 돼요'}">내보내기</button>` : '';
+    const kick = view.phase === 'play' && !mine && c.owner && canKick(c.owner, online[c.owner])
+      ? `<button class="kick" data-kick="${c.owner}" title="${online[c.owner] ? '' : '접속이 끊긴 멤버를 내보내면 탈출할 때 기다리지 않아도 돼요'}">내보내기</button>` : '';
     const items = (c.items || []).map((it) => mine
-      ? `<button class="item" data-give="${esc(it.id)}" title="건네주기">${pix(it.icon, 14)}${esc(it.name)}</button>`
+      ? `<button class="item" data-give="${esc(it.id)}" data-from="${c.id}" title="건네주기">${pix(it.icon, 14)}${esc(it.name)}</button>`
       : `<span class="item static">${pix(it.icon, 14)}${esc(it.name)}</span>`).join('');
+    const switchable = mine && myIds().length > 1;
     return `
-    <div class="member ${mine ? 'on' : ''} ${online[c.id] ? '' : 'offline'}" title="${esc(c.intro)}">
+    <div class="member ${c.id === activeChar ? 'on' : ''} ${mine ? 'mine' : ''} ${online[c.owner] === false ? 'offline' : ''}"
+      ${mine ? `data-switch="${c.id}"` : ''} title="${switchable ? '눌러서 이 캐릭터로 행동하기' : esc(c.intro)}">
       ${avatar(c)}
       <div class="m-info">
         <b>${esc(c.name)}${mine ? ' <span class="badge">나</span>' : ''}</b>
         <small>${pix('pin', 10)} ${c.roomName ? esc(c.roomName) : '어딘가'} · ${SKILLS[c.skill]?.label}</small>
         <div class="m-items">${items}</div>
-        ${online[c.id] ? '' : '<small class="offline-tag">접속 끊김</small>'}${kick}
+        ${online[c.owner] === false ? '<small class="offline-tag">접속 끊김</small>' : ''}${kick}
       </div>
     </div>`;
-  }).join('');
+  }).join('') + (myIds().length > 1 ? '<p class="muted small switch-tip">내 캐릭터를 누르면 그 캐릭터로 바꿔서 행동해요.</p>' : '');
 }
 
 function renderMap() {
   const { w, h, rooms, links } = view.map;
   const pct = (v, total) => `${(v / total) * 100}%`;
   const rect = Object.fromEntries(rooms.map((r) => [r.id, r.rect]));
-  const here = isGM() ? gmRoom : view.here?.id;
+  const here = isGM() ? gmRoom : myChar()?.room;
   let html = '';
   for (const r of rooms) {
     const [x, y, rw, rh] = r.rect;
@@ -821,8 +891,9 @@ function token(c, i, n) {
   const body = imgUrl(c, 'b');
   const figure = body ? `<img class="body-img" src="${esc(body)}" alt="">` : avatar(c, 'sm');
   const style = `--dx:${6 + (seed % 14)}px;--dur:${6 + (seed % 5)}s;--delay:-${seed % 7}s`;
-  return `<span class="token ${c.id === view.me.id ? 'on' : ''} ${body ? 'has-body' : ''}" data-token="${c.id}"
-    title="${esc(c.name)}" style="left:${((i + 1) / (n + 1)) * 100}%">
+  const mine = isMine(c.id);
+  return `<span class="token ${c.id === activeChar ? 'on' : ''} ${mine ? 'mine' : ''} ${body ? 'has-body' : ''}" data-token="${c.id}"
+    ${mine ? `data-switch="${c.id}"` : ''} title="${esc(c.name)}" style="left:${((i + 1) / (n + 1)) * 100}%">
     <span class="center"><span class="walker" style="${style}"><span class="bob">${figure}</span><span class="shadow"></span></span></span></span>`;
 }
 
@@ -836,7 +907,7 @@ function linkPoint([ax, ay, aw, ah], [bx, by, bw, bh]) {
 }
 
 function currentRoom() {
-  if (!isGM()) return view.here;
+  if (!isGM()) return view.rooms?.[myChar()?.room] || null;
   return gmRoom ? view.rooms[gmRoom] : null;
 }
 
@@ -853,8 +924,9 @@ function renderRoom() {
     return;
   }
   panel.classList.toggle('readonly', isGM());
-  $('#room-name').innerHTML = `${pix('pin', 18)} ${esc(r.name)}`;
-  const others = r.people.filter((id) => id !== view.me.id).map((id) => castById(id).name);
+  const who = isGM() ? '' : ` <span class="acting">${avatar(myChar(), 'sm')} ${esc(myChar().name)}</span>`;
+  $('#room-name').innerHTML = `${pix('pin', 18)} ${esc(r.name)}${who}`;
+  const others = r.people.filter((id) => id !== activeChar).map((id) => castById(id).name);
   $('#room-people').textContent = isGM()
     ? (others.length ? `이 구역: ${others.join(', ')}` : '아무도 없다')
     : (others.length ? `함께 있는 멤버: ${others.join(', ')}` : '이 구역엔 혼자다');
@@ -868,11 +940,23 @@ function renderRoom() {
       ${x.open ? '▶' : pix('padlock', 12)} ${esc(x.name || '???')}</button>`).join('');
 }
 
+// 가운데 창: 지금 구역에서 나온 설명문(나레이션·결과)을 최근 것부터 보여 준다
+function renderRoomLog() {
+  const r = currentRoom();
+  const box = $('#room-log');
+  const items = r ? log.filter((m) => !m.global && m.room === r.id && (m.type === 'narr' || m.type === 'sys')).slice(-4) : [];
+  box.hidden = !items.length;
+  box.innerHTML = items.map((m, i) => `<p class="${m.type} ${i === items.length - 1 ? 'latest' : ''}">${m.icon ? pix(m.icon, 14) : ''}${esc(m.text)}</p>`).join('');
+}
+
 function renderChannels() {
   const nav = $('#channels');
   if (!isGM()) {
+    const ids = myIds();
     const me = myChar();
-    nav.innerHTML = `<span class="ear">${pix('pin', 12)} ${esc(me.roomName)} — ${esc(me.name)}에게 들리는 소리</span>`;
+    nav.innerHTML = ids.length > 1
+      ? `<span class="ear">${pix('pin', 12)} 내 캐릭터 ${ids.length}명에게 들리는 소리</span>`
+      : `<span class="ear">${pix('pin', 12)} ${esc(me?.roomName)} — ${esc(me?.name)}에게 들리는 소리</span>`;
     return;
   }
   const occupied = view.map.rooms.filter((r) => r.tokens.length);
@@ -888,6 +972,7 @@ function selectGmRoom(id) {
   gmRoom = id;
   renderMap();
   renderRoom();
+  renderRoomLog();
   renderChannels();
   renderInput();
   renderLog();
@@ -896,7 +981,7 @@ function selectGmRoom(id) {
 // 진행자는 고른 구역의 메시지만 걸러 볼 수 있다
 function gmShows(m) {
   if (!isGM() || !gmRoom) return true;
-  return m.global || m.tag === view.rooms[gmRoom].name;
+  return m.global || m.room === gmRoom;
 }
 
 function renderInput() {
@@ -906,7 +991,8 @@ function renderInput() {
     $('#rp-who').innerHTML = `${pix('book', 16)} 진행자 나레이션 → <b>${esc(target)}</b>`;
   } else {
     const me = myChar();
-    $('#rp-who').innerHTML = `${avatar(me, 'sm')} <b style="color:${esc(me.color)}">${esc(me.name)}</b> <span class="muted">@ ${esc(me.roomName)}</span>`;
+    const more = myIds().length > 1 ? ' <span class="muted small">(왼쪽 목록에서 바꾸기)</span>' : '';
+    $('#rp-who').innerHTML = `${avatar(me, 'sm')} <b style="color:${esc(me.color)}">${esc(me.name)}</b> <span class="muted">@ ${esc(me.roomName)}</span>${more}`;
   }
   $('#rp-range').textContent = VOLUME_DESC[mode];
 }
@@ -921,12 +1007,14 @@ function appendMsg(m) {
   const el = $('#log');
   const tag = m.tag ? `<span class="tag">${esc(m.tag)}</span>` : '';
   const icon = m.icon ? pix(m.icon, 16) : '';
+  // 내 캐릭터가 여럿이면 누가 들었는지 작게 표시한다
+  const ear = !isGM() && myIds().length > 1 && m.by && !m.global ? `<span class="heard-by">${esc(castById(m.by).name)}</span>` : '';
   let html;
   if (m.type === 'muffled') {
-    html = `<div class="msg muffled"><span class="from">${pix('door', 14, MUFFLED)} ${esc(m.from ? `${m.from} 쪽` : '어딘가')}에서 웅얼거리는 소리</span><p>${esc(m.text)}</p></div>`;
+    html = `<div class="msg muffled"><span class="from">${pix('door', 14, MUFFLED)} ${esc(m.from ? `${m.from} 쪽` : '어딘가')}에서 웅얼거리는 소리 ${ear}</span><p>${esc(m.text)}</p></div>`;
   } else if (m.type === 'npc') {
     const from = m.away ? `<span class="from">${esc(m.away)}에서</span>` : '';
-    html = `<div class="msg npc"><span class="avatar sm npc">${pix('speaker', 24)}</span><div>${tag}<b>${esc(m.speaker)}</b>${from}<p>${esc(m.text)}</p></div></div>`;
+    html = `<div class="msg npc"><span class="avatar sm npc">${pix('speaker', 24)}</span><div>${tag}<b>${esc(m.speaker)}</b>${from}${ear}<p>${esc(m.text)}</p></div></div>`;
   } else if (m.type === 'say' && m.charId) {
     const c = castById(m.charId);
     const vol = m.vol === 'shout' ? ' shout' : m.vol === 'whisper' ? ' whisper' : '';
@@ -935,14 +1023,14 @@ function appendMsg(m) {
   } else if (m.type === 'act' && m.charId) {
     html = `<div class="msg act">${tag}<i>* ${esc(josa(castById(m.charId).name, '이', '가'))} ${esc(m.text)}</i></div>`;
   } else {
-    html = `<div class="msg ${esc(m.type)}">${tag}${icon}${esc(m.text)}</div>`;
+    html = `<div class="msg ${esc(m.type)}">${tag}${icon}${esc(m.text)}${ear}</div>`;
   }
   el.insertAdjacentHTML('beforeend', html);
   el.scrollTop = el.scrollHeight;
 }
 
 function logAsText() {
-  const who = isGM() ? '진행자 시점' : `${myChar().name} 시점`;
+  const who = isGM() ? '진행자 시점' : `${myIds().map((id) => castById(id).name).join(', ')} 시점`;
   const lines = [view.scenario.title, `출연: ${view.cast.map((c) => c.name).join(', ')}`, `(${who})`, ''];
   for (const m of log) {
     const where = m.tag ? `[${m.tag}] ` : '';
@@ -961,14 +1049,16 @@ function logAsText() {
 document.querySelector('#screen-game').addEventListener('click', (e) => {
   if (!view || view.phase !== 'play') return;
   const give = e.target.closest('[data-give]');
-  if (give) return openGive(give.dataset.give);
+  if (give) return openGive(give.dataset.give, give.dataset.from);
+  const sw = e.target.closest('[data-switch]');
+  if (sw && !isGM()) return switchChar(sw.dataset.switch);
   const r = e.target.closest('[data-room]');
   if (r) {
     if (isGM()) return selectGmRoom(r.dataset.room);
-    return send({ t: 'move', to: r.dataset.room });
+    return send({ t: 'move', as: activeChar, to: r.dataset.room });
   }
   const o = e.target.closest('[data-obj]');
-  if (o && !isGM()) send({ t: 'interact', obj: o.dataset.obj });
+  if (o && !isGM()) send({ t: 'interact', as: activeChar, obj: o.dataset.obj });
 });
 
 $('#rp-form').addEventListener('submit', (e) => {
@@ -976,7 +1066,7 @@ $('#rp-form').addEventListener('submit', (e) => {
   const text = $('#rp-text').value.trim();
   if (!text || view?.phase !== 'play') return;
   if (isGM()) send({ t: 'narr', room: gmRoom, text });
-  else send({ t: 'say', mode: $('#rp-mode').value, text });
+  else send({ t: 'say', as: activeChar, mode: $('#rp-mode').value, text });
   $('#rp-text').value = '';
 });
 
@@ -984,10 +1074,11 @@ $('#btn-hint').addEventListener('click', () => {
   if (view?.phase !== 'play') return;
   if (isGM()) return send({ t: 'hint' });
   const h = view.hint;
-  if (h.mine) return toast('이미 찬성했어요. 다른 멤버의 찬성을 기다리는 중이에요.');
+  if (h.mine) return toast('이미 찬성했어요. 다른 사람의 찬성을 기다리는 중이에요.');
+  const cost = h.cost ? `, 모두의 시간이 ${h.cost / 60}분 줄어요` : '';
   const ask = h.need > 1
-    ? `힌트는 과반수(${h.need}명)가 찬성하면 나오고, 모두의 시간이 3분 줄어요. 찬성할까요?`
-    : '힌트를 보면 남은 시간이 3분 줄어들어요. 볼까요?';
+    ? `힌트는 과반수(${h.need}명)가 찬성하면 나와요${cost}. 찬성할까요?`
+    : `힌트를 볼까요?${h.cost ? ` 남은 시간이 ${h.cost / 60}분 줄어요.` : ''}`;
   if (confirm(ask)) send({ t: 'hint' });
 });
 $('#btn-pause').addEventListener('click', () => send({ t: 'pause' }));
@@ -1001,21 +1092,21 @@ $('#btn-quit').addEventListener('click', () => {
   show('title');
 });
 
-/* 아이템 건네기 */
+/* 아이템 건네기: 같은 구역에 있는 다른 멤버(내 다른 캐릭터 포함)에게 */
 const giveDlg = $('#give-dialog');
-function openGive(itemId) {
-  const me = myChar();
-  const it = me.items.find((x) => x.id === itemId);
+function openGive(itemId, fromId) {
+  const from = castById(fromId || activeChar);
+  const it = from.items?.find((x) => x.id === itemId);
   if (!it) return;
-  const mates = view.cast.filter((c) => c.id !== me.id && c.room && c.room === me.room);
-  $('#give-title').innerHTML = `${pix(it.icon, 20)} ${esc(josa(it.name, '을', '를'))} 누구에게 건넬까?`;
+  const mates = view.cast.filter((c) => c.id !== from.id && !c.gone && c.room && c.room === from.room);
+  $('#give-title').innerHTML = `${pix(it.icon, 20)} ${esc(from.name)} — ${esc(josa(it.name, '을', '를'))} 누구에게 건넬까?`;
   $('#give-targets').innerHTML = mates.length
     ? mates.map((m) => `<button value="${m.id}" data-to="${m.id}">${avatar(m, 'sm')} ${esc(m.name)}</button>`).join('')
     : '<p class="muted">같은 구역에 있는 멤버가 없다. 같은 구역에 있어야 건넬 수 있다.</p>';
   $('#give-targets').onclick = (e) => {
     const b = e.target.closest('[data-to]');
     if (!b) return;
-    send({ t: 'give', item: itemId, to: b.dataset.to });
+    send({ t: 'give', as: from.id, item: itemId, to: b.dataset.to });
     giveDlg.close();
   };
   giveDlg.showModal();
@@ -1038,11 +1129,11 @@ function openLock(obj) {
 $('#lock-form').addEventListener('submit', (e) => {
   if (e.submitter?.value !== 'ok') return;
   const value = $('#lock-input').value.trim();
-  if (value) send({ t: 'guess', obj: lockObj.id, value });
+  if (value) send({ t: 'guess', as: lockObj.as, obj: lockObj.id, value });
 });
 $('#lock-force').addEventListener('click', () => {
   lockDlg.close();
-  send({ t: 'force', obj: lockObj.id });
+  send({ t: 'force', as: lockObj.as, obj: lockObj.id });
 });
 
 /* ---------------- 모바일: 한 번에 한 칸씩 ---------------- */
@@ -1086,10 +1177,9 @@ function showEnding() {
   if (screen === 'ending' || !view) return;
   const success = view.result === 'escape';
   $('#ending-title').innerHTML = success ? `${pix('door', 48)} 탈출 성공` : `${pix('skull', 48)} 탈출 실패…`;
-  const t = Math.max(0, Math.ceil(view.time.left / 1000));
   $('#ending-text').textContent = success
-    ? `남은 시간 ${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')} — ${view.scenario.title} 클리어`
-    : '다음 화에서는 꼭 나갈 수 있을 거야.';
+    ? `소요 시간 ${fmt(view.time.elapsed)} — ${view.scenario.title} 클리어`
+    : `${view.endText || ''} 다음 화에서는 꼭 나갈 수 있을 거야.`.trim();
   $('#ending-team').innerHTML = view.cast.map((c) => {
     const body = imgUrl(c, 'b');
     return `<div>${body ? `<img class="ending-body" src="${esc(body)}" alt="">` : avatar(c, 'lg')}<span>${esc(c.name)}</span></div>`;

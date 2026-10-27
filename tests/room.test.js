@@ -70,13 +70,16 @@ function setup(names, opts = {}) {
 }
 
 // 시작 구역을 정해서 시작한다
-function start(env, positions) {
+function start(env, positions, options = {}) {
+  Object.assign(env.room.options, options);
   env.room.start();
   env.players.forEach((p, i) => { env.room.state.pos[p.id] = positions[i]; env.room.state.known[p.id] = [positions[i]]; });
   env.room.flush();
   env.players.forEach((p) => { env.sock(p).sent = []; });
 }
 
+// 시계를 ms만큼 앞으로 돌린다
+const advance = (env, ms) => { env.room.state.clock.start -= ms; };
 const received = (env, p) => env.sock(p).sent.filter((m) => m.t === 'msgs').flatMap((m) => m.msgs);
 const say = (env, p, mode, text) => env.room.handle(p, { t: 'say', mode, text });
 
@@ -121,9 +124,9 @@ test('퍼즐 정답은 어떤 플레이어에게도 보내지 않는다', () => 
   for (const p of env.players) assert.ok(!JSON.stringify(env.sock(p).sent).includes('SECRETANSWER'));
 });
 
-test('오답은 1분을 깎고, 행운 특기는 깎지 않으며, 정답은 문을 연다', () => {
+test('제한 시간을 켜면 오답이 1분을 깎고, 행운 특기는 깎지 않으며, 정답은 문을 연다', () => {
   const env = setup(['가', '나'], { 나: { skill: 'luck' } });
-  start(env, ['a', 'a']);
+  start(env, ['a', 'a'], { timeLimit: true });
   const [p1, p2] = env.players;
   const t0 = env.room.timeLeft();
   env.room.handle(p1, { t: 'guess', obj: 'lockA', value: 'WRONG' });
@@ -203,9 +206,9 @@ test('복귀 번호로 자기 자리를 찾고, 남의 화면에는 내 번호�
   assert.equal(env.room.view(p1).me.pin, p1.pin);
 });
 
-test('힌트는 과반수가 찬성해야 나오고, 그때 시간이 깎인다', () => {
+test('힌트는 과반수가 찬성해야 나오고, 제한 시간이 있으면 시간이 깎인다', () => {
   const env = setup(['가', '나', '다']);
-  start(env, ['a', 'b', 'c']);
+  start(env, ['a', 'b', 'c'], { timeLimit: true });
   const [p1, p2] = env.players;
   const t0 = env.room.timeLeft();
   env.room.handle(p1, { t: 'hint' });
@@ -233,26 +236,40 @@ test('이벤트: 처음 들어갈 때 한 번, 화면 효과는 그 구역 사�
 
 test('이벤트: 남은 시간 조건으로 문을 잠갔다가 원래대로 돌린다', () => {
   const env = setup(['가']);
-  start(env, ['b']);
+  start(env, ['b'], { timeLimit: true });
   const s = env.room.state;
   const bc = FIXTURE.links.find((l) => l.id === 'bc');
-  s.endsAt = Date.now() + 299_000;
+  advance(env, 301_000); // 600초 중 299초 남음
   env.room.tick();
   assert.ok(!env.room.linkOpen(bc), '5분 남으면 잠긴다');
   assert.ok(s.log.some((m) => m.type === 'npc' && m.text === '5분 남음'));
-  s.endsAt = Date.now() + 199_000;
+  advance(env, 100_000);
   env.room.tick();
   assert.ok(env.room.linkOpen(bc), '나중에 다시 열린다');
-  assert.ok(env.room.nextWake() <= s.endsAt);
+  assert.ok(env.room.nextWake() <= Date.now() + env.room.timeLeft());
 });
 
 test('시간이 다 되면 실패로 끝난다', () => {
   const env = setup(['가']);
-  start(env, ['a']);
-  env.room.state.endsAt = Date.now() - 1;
+  start(env, ['a'], { timeLimit: true });
+  advance(env, 601_000);
   env.room.tick();
   assert.equal(env.room.phase, 'ended');
   assert.equal(env.room.state.result, 'fail');
+});
+
+test('제한 시간은 기본으로 없고, 오답과 힌트에도 시간이 줄지 않는다', () => {
+  const env = setup(['가']);
+  start(env, ['a']);
+  const [p1] = env.players;
+  assert.equal(env.room.timeLeft(), null);
+  env.room.handle(p1, { t: 'guess', obj: 'lockA', value: 'WRONG' });
+  env.room.handle(p1, { t: 'hint' });
+  assert.ok(env.room.state.log.some((m) => m.text === '힌트: 첫 번째 힌트'));
+  advance(env, 10 * 3600_000);
+  env.room.tick();
+  assert.equal(env.room.phase, 'play', '아무리 오래 걸려도 끝나지 않는다');
+  assert.equal(env.room.view(p1).time.limited, false);
 });
 
 test('저장했다 불러와도 진행 상황이 그대로다', () => {
@@ -276,7 +293,7 @@ test('캐릭터 그림은 올바른 그림 id만 남긴다', () => {
 
 test('게임 화면의 출연진 정보에도 그림 id가 들어간다', () => {
   const env = setup(['가']);
-  env.players[0].char.img = { id: '0123456789abcdef', a: true, b: true };
+  env.players[0].chars[0].img = { id: '0123456789abcdef', a: true, b: true };
   start(env, ['a']);
   assert.deepEqual(env.room.view(env.players[0]).cast[0].img, { id: '0123456789abcdef', a: true, b: true });
 });
@@ -336,4 +353,115 @@ test('자동 힌트는 기본으로 꺼져 있고, 방장만 켜고 끌 수 있�
   room.state.lastProgress = Date.now() - 120_000;
   room.tick();
   assert.equal(hints(), 1, '다시 끄면 안 나온다');
+});
+
+test('한 사람이 캐릭터 여러 명을 데려와 번갈아 행동할 수 있다', () => {
+  const sockets = new Map();
+  const io = { socketsOf: (t) => (sockets.get(t) ? [sockets.get(t)] : []) };
+  const room = new Room('TEST', FIXTURE, io);
+  const { player: me } = room.join(false, [CHAR('첫째'), CHAR('둘째')]);
+  const { player: friend } = room.join(false, CHAR('친구'));
+  for (const p of [me, friend]) sockets.set(p.token, { sent: [], send(d) { this.sent.push(JSON.parse(d)); } });
+  assert.equal(room.join(false, [CHAR('1'), CHAR('2'), CHAR('3'), CHAR('4')]).error?.includes('최대'), true, '방 전체 6명을 넘을 수 없다');
+  room.start();
+  const [first, second] = room.charIdsOf(me);
+  Object.assign(room.state.pos, { [first]: 'a', [second]: 'd', [friend.id]: 'c' });
+  room.handle(me, { t: 'say', as: second, mode: 'whisper', text: '둘째가 속삭임' });
+  const said = room.state.log.find((m) => m.text === '둘째가 속삭임');
+  assert.equal(said.charId, second, '고른 캐릭터로 말한다');
+  const v = room.view(me);
+  assert.deepEqual(v.me.chars, [first, second]);
+  assert.deepEqual(Object.keys(v.rooms).sort(), ['a', 'd'], '내 캐릭터들이 있는 구역을 모두 본다');
+  assert.ok(sockets.get(me.token).sent.some((m) => m.t === 'msgs' && m.msgs.some((x) => x.text === '둘째가 속삭임')));
+  room.handle(me, { t: 'hint' });
+  assert.equal(room.view(me).hint.need, 2, '힌트 투표는 사람 수 기준');
+  room.handle(me, { t: 'say', as: friend.id, mode: 'say', text: '남의 캐릭터로' });
+  assert.notEqual(room.state.log.find((m) => m.text === '남의 캐릭터로').charId, friend.id, '남의 캐릭터로는 행동할 수 없다');
+});
+
+const ATTACK = {
+  ...FIXTURE,
+  events: [
+    {
+      id: 'chase', on: 'enter', room: 'b',
+      do: [{ attack: { id: 'run', seconds: 30, label: '도망쳐', until: { allIn: 'c' }, success: [{ narr: '살았다' }], fail: [{ gameover: '잡혔다' }] }, to: 'all' }],
+    },
+    {
+      id: 'bomb', on: 'inspect', obj: 'box',
+      do: [{ attack: { id: 'bomb', seconds: 20, label: '폭탄', until: { done: 'lockA' }, fail: [{ narr: '쾅' }, { moveTo: 'd' }] } }],
+    },
+  ],
+};
+function attackSetup(names, { openAB = true } = {}) {
+  const sockets = new Map();
+  const io = { socketsOf: (t) => (sockets.get(t) ? [sockets.get(t)] : []) };
+  const room = new Room('TEST', ATTACK, io);
+  const players = names.map((n) => room.join(false, CHAR(n)).player);
+  for (const p of players) sockets.set(p.token, { send() {} });
+  room.start();
+  if (openAB) room.state.unlocked.push('ab');
+  return { room, players };
+}
+
+test('타임어택: 시간 안에 조건을 채우면 성공 연출', () => {
+  const { room, players: [p1, p2] } = attackSetup(['가', '나']);
+  Object.assign(room.state.pos, { [p1.id]: 'a', [p2.id]: 'c' });
+  room.handle(p1, { t: 'move', to: 'b' });
+  assert.equal(room.view(p1).attacks[0].label, '도망쳐');
+  assert.equal(room.view(p2).attacks.length, 1, '전체 대상이면 모두에게 보인다');
+  room.handle(p1, { t: 'move', to: 'c' });
+  assert.equal(room.state.attacks.length, 0);
+  assert.ok(room.state.log.some((m) => m.text === '살았다'));
+  assert.equal(room.phase, 'play');
+});
+
+test('타임어택: 시간이 지나면 실패 연출 (게임 오버)', () => {
+  const { room, players: [p1] } = attackSetup(['가']);
+  room.state.pos[p1.id] = 'a';
+  room.handle(p1, { t: 'move', to: 'b' });
+  assert.ok(room.nextWake() <= Date.now() + 30_000);
+  room.state.clock.start -= 31_000;
+  room.tick();
+  assert.equal(room.phase, 'ended');
+  assert.equal(room.view(p1).endText, '잡혔다');
+});
+
+test('타임어택: 그 구역 사람만 대상이고, 오답은 남은 시간을 깎고, 실패하면 끌려간다', () => {
+  const { room, players: [p1, p2] } = attackSetup(['가', '나'], { openAB: false });
+  Object.assign(room.state.pos, { [p1.id]: 'b', [p2.id]: 'c' });
+  room.handle(p1, { t: 'interact', obj: 'box' });
+  assert.equal(room.view(p1).attacks.length, 1);
+  assert.equal(room.view(p2).attacks.length, 0, '다른 구역 사람은 모른다');
+  const before = room.state.attacks[0].ends;
+  room.state.pos[p1.id] = 'a';
+  room.handle(p1, { t: 'guess', obj: 'lockA', value: 'WRONG' });
+  assert.equal(before - room.state.attacks[0].ends, 10_000);
+  room.state.clock.start -= 11_000;
+  room.tick();
+  assert.equal(room.state.pos[p1.id], 'd', '실패하면 대상만 끌려간다');
+  assert.equal(room.state.pos[p2.id], 'c');
+  assert.equal(room.phase, 'play');
+});
+
+test('진행자가 시간을 멈추면 타임어택도 멈춘다', () => {
+  const sockets = new Map();
+  const io = { socketsOf: (t) => (sockets.get(t) ? [sockets.get(t)] : []) };
+  const room = new Room('TEST', ATTACK, io);
+  const p1 = room.join(false, CHAR('가')).player;
+  const gm = room.join(true).player;
+  for (const p of [p1, gm]) sockets.set(p.token, { send() {} });
+  room.start();
+  room.state.unlocked.push('ab');
+  room.state.pos[p1.id] = 'a';
+  room.handle(p1, { t: 'move', to: 'b' });
+  room.handle(gm, { t: 'pause' });
+  const left = room.view(p1).attacks[0].left;
+  // 멈춘 채로 1분이 지났다 (시계 전체를 1분 앞당긴 것과 같다)
+  room.state.clock.start -= 60_000;
+  room.state.clock.pausedAt -= 60_000;
+  room.tick();
+  assert.equal(room.phase, 'play');
+  assert.equal(room.view(p1).attacks[0].left, left);
+  room.handle(gm, { t: 'pause' });
+  assert.ok(Math.abs(room.view(p1).attacks[0].left - left) < 1_000, '다시 흐르면 멈춘 자리부터 센다');
 });

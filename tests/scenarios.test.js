@@ -40,6 +40,13 @@ for (const sc of SCENARIOS) {
         for (const k of ['unlock', 'lock', 'release']) if (act[k]) assert.ok(linkIds.has(act[k]), `이벤트 링크 없음: ${ev.id}`);
         if (act.to && !['all', 'here'].includes(act.to)) assert.ok(sc.rooms[act.to], `이벤트 대상 구역 없음: ${ev.id}`);
         if (act.effect) assert.ok(['flicker', 'blackout', 'alarm'].includes(act.effect), `알 수 없는 효과: ${ev.id}`);
+        if (act.attack) {
+          const u = act.attack.until || {};
+          assert.ok(act.attack.id && act.attack.seconds > 0, `타임어택 설정 빠짐: ${ev.id}`);
+          if (u.done) assert.ok(known(u.done), `타임어택 조건 대상 없음: ${ev.id}`);
+          for (const k of ['allIn', 'noneIn']) if (u[k]) assert.ok(sc.rooms[u[k]], `타임어택 조건 구역 없음: ${ev.id}`);
+          for (const f of act.attack.fail || []) if (f.moveTo) assert.ok(sc.rooms[f.moveTo], `끌려갈 구역 없음: ${ev.id}`);
+        }
       }
     }
   });

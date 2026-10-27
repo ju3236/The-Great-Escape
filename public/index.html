@@ -97,7 +97,8 @@
         </div>
         <p id="role-desc" class="muted small"></p>
         <div id="pick-wrap">
-          <h3>2. 데려갈 캐릭터</h3>
+          <h3>2. 데려갈 캐릭터 <span id="pick-count" class="muted small"></span></h3>
+          <p class="muted small">여러 명을 고를 수 있어요. 방 전체 캐릭터는 최대 6명이에요.</p>
           <ul id="pick-list" class="char-list pick"></ul>
           <p id="pick-empty" class="muted" hidden>먼저 <button type="button" data-go="chars">캐릭터 관리</button>에서 캐릭터를 만들어 주세요.</p>
         </div>
@@ -136,7 +137,7 @@
       </div>
       <h3 id="lobby-ep"></h3>
       <p id="lobby-summary" class="muted small"></p>
-      <h3 class="gap">참가자</h3>
+      <h3 class="gap">참가자 <span id="lobby-count" class="muted small"></span></h3>
       <ul id="lobby-players" class="char-list"></ul>
       <button id="btn-change-char" class="wide" hidden>내 캐릭터 바꾸기</button>
       <h3 class="gap">방 설정</h3>
@@ -179,6 +180,7 @@
         <div id="resume-info" class="resume-info"></div>
       </aside>
       <main class="col col-center">
+        <div id="attack-banner" class="attack-banner" hidden></div>
         <div id="map" class="map"></div>
         <section class="room-panel">
           <div class="room-head">
@@ -186,6 +188,7 @@
             <span id="room-people" class="muted"></span>
           </div>
           <p id="room-desc" class="room-desc"></p>
+          <div id="room-log" class="room-log" hidden></div>
           <div id="objects" class="objects"></div>
           <div id="exits" class="exits"></div>
         </section>
@@ -268,8 +271,9 @@
   <dialog id="char-dialog">
     <form method="dialog">
       <h3>어떤 캐릭터로 참가할까?</h3>
+      <p class="muted small">여러 명을 고를 수 있어요.</p>
       <ul id="char-choices" class="char-list pick"></ul>
-      <div class="row"><button value="cancel">취소</button></div>
+      <div class="row"><button value="cancel">취소</button><button type="button" id="char-choices-ok" class="primary">이대로 바꾸기</button></div>
     </form>
   </dialog>
 
