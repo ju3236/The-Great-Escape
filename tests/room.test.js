@@ -2,7 +2,7 @@
 // 실행: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { Room } from '../src/room.js';
+import { Room, cleanChar } from '../src/room.js';
 
 // a ─(잠긴 문)─ b ─(통로)─ c ~(얇은 벽)~ d
 const FIXTURE = {
@@ -266,4 +266,17 @@ test('저장했다 불러와도 진행 상황이 그대로다', () => {
   assert.equal(restored.state.pos[p1.id], 'a');
   assert.ok(restored.state.log.some((m) => m.text === '기록'));
   assert.equal(restored.players.size, 2);
+});
+
+test('캐릭터 그림은 올바른 그림 id만 남긴다', () => {
+  assert.deepEqual(cleanChar(CHAR('가', { img: { id: '0123456789abcdef', a: 1, b: 0 } })).img, { id: '0123456789abcdef', a: true, b: false });
+  assert.equal(cleanChar(CHAR('가', { img: { id: '../etc' } })).img, undefined);
+  assert.equal(cleanChar(CHAR('가', { avatar: 'data:image/png;base64,AAAA' })).avatar, undefined, '그림 원본은 방 정보에 남지 않는다');
+});
+
+test('게임 화면의 출연진 정보에도 그림 id가 들어간다', () => {
+  const env = setup(['가']);
+  env.players[0].char.img = { id: '0123456789abcdef', a: true, b: true };
+  start(env, ['a']);
+  assert.deepEqual(env.room.view(env.players[0]).cast[0].img, { id: '0123456789abcdef', a: true, b: true });
 });

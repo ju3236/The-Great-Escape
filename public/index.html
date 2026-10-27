@@ -40,7 +40,19 @@
           <legend>초상화</legend>
           <div id="sprite-options" class="sprite-options"></div>
         </fieldset>
-        <label>이미지 URL (선택) <input name="image" type="url" placeholder="https://..."></label>
+        <fieldset class="img-field">
+          <legend>내 그림 (선택)</legend>
+          <div class="img-preview">
+            <span id="avatar-preview"></span>
+            <div id="body-preview" class="body-preview"></div>
+          </div>
+          <div class="row wrap">
+            <label class="file-btn">그림 올리기<input type="file" id="img-file" accept="image/*" hidden></label>
+            <button type="button" id="btn-recrop" hidden>프사 다시 자르기</button>
+            <button type="button" id="btn-img-clear" class="danger" hidden>그림 지우기</button>
+          </div>
+          <p class="muted small">전신 그림은 지도 위를 걸어 다니고, 잘라 낸 프사는 채팅과 목록에 나와요. 그림이 없으면 위의 도트 초상화를 써요.</p>
+        </fieldset>
         <label>성격
           <select name="personality"></select>
         </label>
@@ -224,6 +236,31 @@
     </form>
   </dialog>
 
+  <!-- 그림 다듬기 -->
+  <dialog id="img-dialog" class="wide-dialog">
+    <form method="dialog">
+      <h3>그림 다듬기</h3>
+      <div class="img-steps">
+        <div class="img-step">
+          <p class="small muted">① 전신 — 지도 위를 걸어 다녀요</p>
+          <div id="body-stage" class="body-stage"></div>
+          <label class="check"><input type="checkbox" id="clear-white"> 흰 배경 지우기</label>
+        </div>
+        <div class="img-step">
+          <p class="small muted">② 프사 — 네모를 끌어서 옮기고, 막대로 크기를 정해요</p>
+          <canvas id="crop-canvas" width="280" height="280"></canvas>
+          <input type="range" id="crop-scale" min="15" max="100" aria-label="프사 크기">
+          <div class="crop-preview">미리 보기 <span id="crop-preview"></span></div>
+        </div>
+      </div>
+      <p id="img-busy" class="muted small" hidden>그림을 다듬는 중…</p>
+      <div class="row">
+        <button value="cancel" formnovalidate>취소</button>
+        <button id="img-save" value="ok" class="primary">이대로 쓰기</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- 대기실에서 캐릭터 바꾸기 -->
   <dialog id="char-dialog">
     <form method="dialog">
@@ -247,6 +284,7 @@
   <script src="js/pixels.js"></script>
   <script src="js/voices.js"></script>
   <script src="js/sound.js"></script>
+  <script src="js/imagetool.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

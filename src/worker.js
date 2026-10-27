@@ -4,7 +4,10 @@ import { DurableObject } from 'cloudflare:workers';
 import { Room, SCENARIO_LIST } from './room.js';
 
 const ROOM_TTL = 6 * 60 * 60 * 1000; // 아무도 접속하지 않은 방은 6시간 뒤 정리
-const MAX_MESSAGE = 32 * 1024;
+const MAX_MESSAGE = 600 * 1024; // 캐릭터 그림이 실려 올 수 있다
+const MAX_IMAGE = 300 * 1024; // 그림 한 장(data URL 문자열) 최대 길이
+const IMAGE_RE = /^data:image\/(png|webp|jpeg);base64,[A-Za-z0-9+/=]+$/;
+const IMG_PATH = /^\/img\/([A-HJ-NP-Z2-9]{4})\/([0-9a-f]{16})\/([ab])$/;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_RE = /^[A-HJ-NP-Z2-9]{4}$/;
 
@@ -32,6 +35,9 @@ export default {
       }
       return json({ error: '방을 만들지 못했어요. 잠시 뒤 다시 시도해 주세요.' }, 503);
     }
+
+    const img = url.pathname.match(IMG_PATH);
+    if (img) return roomStub(env, img[1]).fetch(request);
 
     if (url.pathname === '/ws') {
       if (request.headers.get('Upgrade') !== 'websocket') return new Response('WebSocket 전용 주소예요.', { status: 426 });
@@ -65,6 +71,8 @@ export class GameRoom extends DurableObject {
 
   async fetch(request) {
     const url = new URL(request.url);
+    const img = url.pathname.match(IMG_PATH);
+    if (img) return this.serveImage(img[2], img[3]);
     if (url.pathname === '/init') {
       if (this.room) return new Response('exists', { status: 409 });
       const { code, scenario } = await request.json();
@@ -85,6 +93,33 @@ export class GameRoom extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  // 캐릭터 그림: 주소에 id가 들어 있고 바뀌면 id도 바뀌므로 오래 캐시해도 된다
+  async serveImage(id, kind) {
+    const saved = await this.ctx.storage.get(`img:${id}`);
+    const dataUrl = saved?.[kind];
+    if (!dataUrl) return new Response('없는 그림이에요.', { status: 404 });
+    const [head, b64] = dataUrl.split(',');
+    const bytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+    return new Response(bytes, {
+      headers: { 'Content-Type': head.slice(5, head.indexOf(';')), 'Cache-Control': 'public, max-age=31536000, immutable' },
+    });
+  }
+
+  // 메시지에 실려 온 그림을 떼어 저장하고, 캐릭터에는 그림 id만 남긴다
+  async takeImages(char) {
+    if (!char || typeof char !== 'object') return;
+    const pick = (v) => (typeof v === 'string' && v.length <= MAX_IMAGE && IMAGE_RE.test(v) ? v : null);
+    const a = pick(char.avatar);
+    const b = pick(char.body);
+    delete char.avatar;
+    delete char.body;
+    delete char.img;
+    if (!a && !b) return;
+    const id = [...crypto.getRandomValues(new Uint8Array(8))].map((x) => x.toString(16).padStart(2, '0')).join('');
+    await this.ctx.storage.put(`img:${id}`, { a, b });
+    char.img = { id, a: !!a, b: !!b };
+  }
+
   reply(ws, obj) {
     try { ws.send(JSON.stringify(obj)); } catch { /* 닫힌 소켓 */ }
   }
@@ -97,6 +132,7 @@ export class GameRoom extends DurableObject {
     const room = this.room;
     const token = ws.deserializeAttachment()?.token;
     const player = token && room.players.get(token);
+    if (msg.t === 'join' || msg.t === 'setChar') await this.takeImages(msg.char);
 
     if (!player) {
       if (msg.t === 'join') {

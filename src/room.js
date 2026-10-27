@@ -54,10 +54,14 @@ function cleanChar(c) {
     personality: PERSONALITIES[c.personality] ? c.personality : 'calm',
     skill: SKILLS[c.skill] ? c.skill : 'none',
     intro: str(c.intro, 120),
+    // 올린 그림은 Worker가 따로 저장하고 id만 남긴다 (a: 프사, b: 전신)
+    img: c.img && /^[0-9a-f]{16}$/.test(c.img.id) ? { id: c.img.id, a: !!c.img.a, b: !!c.img.b } : undefined,
   };
 }
 
 const randomHex = (bytes) => [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+export { cleanChar };
 
 export class Room {
   // scenario: 에피소드 id, 또는 시나리오 객체(테스트용)
@@ -413,7 +417,7 @@ export class Room {
     const known = (roomId) => p.isGM || this.knows(p.id, roomId);
 
     const cast = this.cast.map((c) => ({
-      id: c.id, name: c.name, color: c.color, image: c.image, sprite: c.sprite, gone: !!c.gone,
+      id: c.id, name: c.name, color: c.color, image: c.image, sprite: c.sprite, img: c.img, gone: !!c.gone,
       personality: c.personality, skill: c.skill, intro: c.intro,
       room: seesChar(c) ? s.pos[c.id] : null,
       roomName: seesChar(c) ? this.room(s.pos[c.id]).name : null,

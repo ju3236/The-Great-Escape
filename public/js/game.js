@@ -72,14 +72,26 @@ function toast(text) {
 
 /* ---------------- 캐릭터 관리 ---------------- */
 let characters = store(CHAR_KEY) || [];
-const saveChars = () => store(CHAR_KEY, characters);
+function saveChars() {
+  try {
+    localStorage.setItem(CHAR_KEY, JSON.stringify(characters));
+  } catch {
+    alert('기기 저장 공간이 부족해서 저장하지 못했어요. 쓰지 않는 캐릭터나 그림을 지워 주세요.');
+  }
+}
 
+// 캐릭터 그림 주소: 내 기기에 있는 그림, 또는 방 서버에 올라간 그림 (a: 프사, b: 전신)
+function imgUrl(c, kind) {
+  const local = kind === 'a' ? c.avatar : c.body;
+  if (local) return local;
+  if (c.img?.[kind] && view?.code) return `/img/${view.code}/${c.img.id}/${kind}`;
+  return null;
+}
 
 function avatar(c, size = '') {
   const px = { sm: 28, lg: 72 }[size] || 40;
-  const inner = c.image
-    ? `<img src="${esc(c.image)}" alt="">`
-    : spriteSvg(c.sprite, c.color, px);
+  const src = imgUrl(c, 'a') || c.image;
+  const inner = src ? `<img src="${esc(src)}" alt="">` : spriteSvg(c.sprite, c.color, px);
   return `<span class="avatar ${size}" style="--c:${esc(c.color)}">${inner}</span>`;
 }
 
@@ -95,7 +107,7 @@ function renderSpritePicker() {
       ${spriteSvg(k, form.color.value, 40)}<span>${v.label}</span>
     </label>`).join('');
 }
-form.color.addEventListener('input', renderSpritePicker);
+form.color.addEventListener('input', () => { renderSpritePicker(); renderImagePreview(); });
 renderSpritePicker();
 form.skill.addEventListener('change', updateSkillDesc);
 updateSkillDesc();
@@ -104,17 +116,89 @@ function resetForm() {
   form.reset();
   form.id.value = '';
   form.sprite.value = 'short';
+  formImages = { avatar: null, body: null };
+  renderImagePreview();
   renderSpritePicker();
   $('#form-title').textContent = '새 캐릭터';
   updateSkillDesc();
 }
 $('#form-reset').addEventListener('click', resetForm);
 
+/* 캐릭터 그림: 올리기 → 전신(배경 지우기) + 프사 자르기 */
+let formImages = { avatar: null, body: null };
+function renderImagePreview() {
+  const preview = { name: form.name.value || '?', color: form.color.value, sprite: form.sprite?.value, avatar: formImages.avatar };
+  $('#avatar-preview').innerHTML = avatar(preview, 'lg');
+  $('#body-preview').innerHTML = formImages.body
+    ? `<img src="${esc(formImages.body)}" alt="전신 그림">`
+    : '<span class="muted small">전신 그림 없음</span>';
+  $('#btn-recrop').hidden = !formImages.body;
+  $('#btn-img-clear').hidden = !formImages.body && !formImages.avatar;
+}
+
+const imgDlg = $('#img-dialog');
+let editor = null; // { body, crop }
+async function openImageEditor(src, clearWhite) {
+  $('#clear-white').checked = clearWhite;
+  imgDlg.showModal();
+  const refresh = async () => {
+    $('#img-busy').hidden = false;
+    $('#img-save').disabled = true;
+    try {
+      const body = await ImageTool.makeBody(src, { clearWhite: $('#clear-white').checked });
+      const img = await ImageTool.loadSrc(body);
+      $('#body-stage').innerHTML = `<img src="${esc(body)}" alt="">`;
+      const crop = ImageTool.cropper($('#crop-canvas'), img, () => {
+        if (editor?.crop) $('#crop-preview').innerHTML = avatar({ color: form.color.value, avatar: editor.crop.result() }, 'lg');
+      });
+      editor = { body, crop };
+      $('#crop-scale').value = Math.round(crop.ratio * 100);
+      $('#crop-preview').innerHTML = avatar({ color: form.color.value, avatar: crop.result() }, 'lg');
+    } catch (err) {
+      alert(err.message || '그림을 다듬지 못했어요.');
+      imgDlg.close();
+    } finally {
+      $('#img-busy').hidden = true;
+      $('#img-save').disabled = false;
+    }
+  };
+  $('#clear-white').onchange = refresh;
+  await refresh();
+}
+$('#crop-scale').addEventListener('input', (e) => editor?.crop.setScale(e.target.value / 100));
+$('#img-save').addEventListener('click', () => {
+  if (!editor) return;
+  formImages = { body: editor.body, avatar: editor.crop.result() };
+  renderImagePreview();
+});
+$('#img-file').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) return alert('그림 파일만 올릴 수 있어요.');
+  try {
+    const src = await ImageTool.readFile(file);
+    const probe = ImageTool.fit(await ImageTool.loadSrc(src), 400, 400);
+    await openImageEditor(src, ImageTool.looksWhiteBg(probe));
+  } catch (err) {
+    alert(err.message || '그림을 읽을 수 없어요.');
+  }
+});
+$('#btn-recrop').addEventListener('click', () => formImages.body && openImageEditor(formImages.body, false));
+$('#btn-img-clear').addEventListener('click', () => {
+  formImages = { avatar: null, body: null };
+  renderImagePreview();
+});
+form.name.addEventListener('input', renderImagePreview);
+renderImagePreview();
+
 form.addEventListener('submit', (e) => {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(form));
   data.name = data.name.trim();
   if (!data.name) return;
+  data.avatar = formImages.avatar || undefined;
+  data.body = formImages.body || undefined;
   if (data.id) {
     Object.assign(characters.find((c) => c.id === data.id), data);
   } else {
@@ -145,8 +229,10 @@ $('#char-list').addEventListener('click', (e) => {
   const del = e.target.dataset.del;
   if (edit) {
     const c = characters.find((x) => x.id === edit);
-    for (const k of ['id', 'name', 'color', 'image', 'personality', 'skill', 'intro']) form[k].value = c[k] || '';
+    for (const k of ['id', 'name', 'color', 'personality', 'skill', 'intro']) form[k].value = c[k] || '';
     if (!c.color) form.color.value = '#8e3a2e';
+    formImages = { avatar: c.avatar || null, body: c.body || null };
+    renderImagePreview();
     form.sprite.value = SPRITES[c.sprite] ? c.sprite : 'short';
     renderSpritePicker();
     $('#form-title').textContent = `${c.name} 수정`;
@@ -665,10 +751,7 @@ function renderMap() {
       html += `<div class="room unknown" style="${style}" data-room="${r.id}"><span>???</span></div>`;
       continue;
     }
-    const tokens = r.tokens.map((id) => {
-      const c = castById(id);
-      return `<span class="token ${id === view.me.id ? 'on' : ''}" title="${esc(c.name)}">${avatar(c, 'sm')}</span>`;
-    }).join('');
+    const tokens = r.tokens.map((id, i, all) => token(castById(id), i, all.length)).join('');
     html += `<div class="room ${r.id === here ? 'here' : ''}" style="${style}" data-room="${r.id}">
       <span class="room-label">${esc(r.name)}</span><div class="tokens">${tokens}</div></div>`;
   }
@@ -682,7 +765,37 @@ function renderMap() {
   map.style.width = `min(100%, calc(52vh * ${w / h}))`;
   map.style.setProperty('--gw', w);
   map.style.setProperty('--gh', h);
+  // 다른 방으로 옮긴 캐릭터는 원래 자리에서 새 자리로 걸어가게 한다
+  const before = {};
+  map.querySelectorAll('[data-token]').forEach((el) => { before[el.dataset.token] = el.getBoundingClientRect(); });
   map.innerHTML = html;
+  map.querySelectorAll('[data-token]').forEach((el) => {
+    const old = before[el.dataset.token];
+    if (!old) return;
+    const now = el.getBoundingClientRect();
+    const dx = old.left - now.left;
+    const dy = old.top - now.top;
+    if (Math.abs(dx) + Math.abs(dy) < 4) return;
+    el.style.transition = 'none';
+    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.classList.add('walking', dx > 0 ? 'to-left' : 'to-right');
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transition = 'transform 1.1s ease-in-out';
+      el.style.transform = '';
+    }));
+    el.addEventListener('transitionend', () => el.classList.remove('walking', 'to-left', 'to-right'), { once: true });
+  });
+}
+
+// 지도 위 캐릭터: 전신 그림(없으면 프사·도트)이 방 안을 천천히 오간다
+function token(c, i, n) {
+  const seed = [...c.id].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) >>> 0, 7);
+  const body = imgUrl(c, 'b');
+  const figure = body ? `<img class="body-img" src="${esc(body)}" alt="">` : avatar(c, 'sm');
+  const style = `--dx:${6 + (seed % 14)}px;--dur:${6 + (seed % 5)}s;--delay:-${seed % 7}s`;
+  return `<span class="token ${c.id === view.me.id ? 'on' : ''} ${body ? 'has-body' : ''}" data-token="${c.id}"
+    title="${esc(c.name)}" style="left:${((i + 1) / (n + 1)) * 100}%">
+    <span class="center"><span class="walker" style="${style}"><span class="bob">${figure}</span><span class="shadow"></span></span></span></span>`;
 }
 
 function linkPoint([ax, ay, aw, ah], [bx, by, bw, bh]) {
@@ -949,7 +1062,10 @@ function showEnding() {
   $('#ending-text').textContent = success
     ? `남은 시간 ${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')} — ${view.scenario.title} 클리어`
     : '다음 화에서는 꼭 나갈 수 있을 거야.';
-  $('#ending-team').innerHTML = view.cast.map((c) => `<div>${avatar(c, 'lg')}<span>${esc(c.name)}</span></div>`).join('');
+  $('#ending-team').innerHTML = view.cast.map((c) => {
+    const body = imgUrl(c, 'b');
+    return `<div>${body ? `<img class="ending-body" src="${esc(body)}" alt="">` : avatar(c, 'lg')}<span>${esc(c.name)}</span></div>`;
+  }).join('');
   show('ending');
 }
 $('#btn-save-log').addEventListener('click', () => download(`${view.scenario.title}_역극로그.txt`, logAsText()));
