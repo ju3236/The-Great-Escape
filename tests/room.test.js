@@ -296,3 +296,44 @@ test('자물쇠 창을 열어 둔 사이 다른 사람이 풀면 창을 닫으�
   assert.ok(env.sock(p1).sent.some((m) => m.t === 'lockDone'), '늦게 낸 답에도 이미 열렸다고 알린다');
   assert.ok(t0 - env.room.timeLeft() < 2_000, '이미 열린 자물쇠에 낸 답으로 시간이 줄지 않는다');
 });
+
+test('캐릭터 이름으로 나가는 말은 플레이어가 직접 쓴 것뿐이다', () => {
+  const env = setup(['가', '나']);
+  start(env, ['a', 'b']);
+  const [p1, p2] = env.players;
+  env.room.handle(p1, { t: 'interact', obj: 'lockA' });
+  env.room.handle(p1, { t: 'guess', obj: 'lockA', value: 'WRONG' });
+  env.room.handle(p1, { t: 'guess', obj: 'lockA', value: 'SECRETANSWER' });
+  env.room.handle(p2, { t: 'interact', obj: 'box' });
+  env.room.handle(p2, { t: 'move', to: 'c' });
+  env.room.handle(p2, { t: 'interact', obj: 'gate' });
+  say(env, p1, 'say', '내가 쓴 말');
+  const says = env.room.state.log.filter((m) => m.type === 'say');
+  assert.deepEqual(says.map((m) => m.text), ['내가 쓴 말']);
+});
+
+test('자동 힌트는 기본으로 꺼져 있고, 방장만 켜고 끌 수 있다', () => {
+  const idle = { ...FIXTURE, events: [{ id: 'idle', on: 'idle', seconds: 60, repeat: true, do: [{ voice: '도와줄까', speaker: '스피커', to: 'all' }, { hint: '자동 힌트' }] }] };
+  const sockets = new Map();
+  const io = { socketsOf: (t) => (sockets.get(t) ? [sockets.get(t)] : []) };
+  const room = new Room('TEST', idle, io);
+  const host = room.join(false, CHAR('방장')).player;
+  const guest = room.join(false, CHAR('손님')).player;
+  for (const p of [host, guest]) sockets.set(p.token, { send() {} });
+  room.start();
+  const hints = () => room.state.log.filter((m) => m.text.startsWith('자동 힌트')).length;
+  room.state.lastProgress = Date.now() - 120_000;
+  room.tick();
+  assert.equal(hints(), 0, '기본은 꺼짐');
+  assert.equal(room.view(guest).options.autoHint, false);
+  room.handle(guest, { t: 'option', autoHint: true });
+  assert.equal(room.options.autoHint, false, '방장이 아니면 못 바꾼다');
+  room.handle(host, { t: 'option', autoHint: true });
+  room.state.lastProgress = Date.now() - 120_000;
+  room.tick();
+  assert.equal(hints(), 1, '켜면 나온다');
+  room.handle(host, { t: 'option', autoHint: false });
+  room.state.lastProgress = Date.now() - 120_000;
+  room.tick();
+  assert.equal(hints(), 1, '다시 끄면 안 나온다');
+});

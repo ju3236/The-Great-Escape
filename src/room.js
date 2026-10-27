@@ -4,7 +4,7 @@ import { SCENARIOS } from './scenarios.js';
 import voices from '../public/js/voices.js';
 import pixels from '../public/js/pixels.js';
 
-const { PERSONALITIES, SKILLS, voiceLine } = voices;
+const { PERSONALITIES, SKILLS } = voices;
 const { SPRITES } = pixels;
 
 const HINT_COST = 180;
@@ -78,6 +78,7 @@ export class Room {
     this.fresh = []; // 아직 플레이어에게 보내지 않은 메시지
     this.unsaved = []; // 아직 저장하지 않은 메시지
     this.io = io; // { socketsOf(token) → 열린 소켓 목록 }
+    this.options = { autoHint: false }; // 방장이 바꾸는 방 설정
   }
 
   // 메시지 기록(log)은 따로 저장하므로 빼고 담는다
@@ -90,6 +91,7 @@ export class Room {
       hostToken: this.hostToken,
       phase: this.phase,
       lastActive: this.lastActive,
+      options: this.options,
       state,
     };
   }
@@ -99,6 +101,7 @@ export class Room {
     room.hostToken = snap.hostToken;
     room.phase = snap.phase;
     room.lastActive = snap.lastActive;
+    room.options = { ...room.options, ...snap.options };
     if (snap.state) room.state = { relocked: [], fired: [], hintVotes: [], lastProgress: Date.now(), ...snap.state, log };
     return room;
   }
@@ -292,7 +295,7 @@ export class Room {
         else if (s.paused) s.pausedLeft += act.time * 1000;
         else s.endsAt += act.time * 1000;
       }
-      if (act.hint) {
+      if (act.hint && this.options.autoHint) {
         const h = this.scenario.hints.find((x) => !this.isDone(x.until));
         if (h) this.post({ type: 'sys', text: `${act.hint === true ? '힌트' : act.hint}: ${h.text}`, global: true, icon: 'bulb' });
       }
@@ -316,7 +319,7 @@ export class Room {
       if (left <= this.eventLeft(ev) * 1000) this.fire('time', { only: ev.id });
     }
     for (const ev of this.scenario.events || []) {
-      if (ev.on === 'idle' && Date.now() - s.lastProgress >= ev.seconds * 1000) {
+      if (ev.on === 'idle' && this.options.autoHint && Date.now() - s.lastProgress >= ev.seconds * 1000) {
         s.lastProgress = Date.now();
         this.fire('idle', { only: ev.id });
       }
@@ -331,7 +334,7 @@ export class Room {
     let next = s.endsAt;
     for (const ev of this.scenario.events || []) {
       if (ev.on === 'time' && !s.fired.includes(ev.id)) next = Math.min(next, s.endsAt - this.eventLeft(ev) * 1000);
-      if (ev.on === 'idle') next = Math.min(next, s.lastProgress + ev.seconds * 1000);
+      if (ev.on === 'idle' && this.options.autoHint) next = Math.min(next, s.lastProgress + ev.seconds * 1000);
     }
     return next;
   }
@@ -406,6 +409,7 @@ export class Room {
       phase: this.phase,
       code: this.code,
       me: { id: p.id, isGM: p.isGM, isHost: p.token === this.hostToken, pin: p.pin },
+      options: this.options,
       scenario: { id: this.scenario.id, title: this.scenario.title, summary: this.scenario.summary, intro: this.scenario.intro, map: this.scenario.map },
       players,
     };
@@ -484,7 +488,6 @@ export class Room {
     this.post({ type: 'sys', text: `녹화 시작! 제한 시간 ${Math.floor(this.scenario.timeLimit / 60)}분.`, global: true });
     for (const c of cast) {
       this.post({ type: 'narr', text: `${josa(c.name, '이', '가')} ${this.room(pos[c.id]).name}에서 눈을 떴다.`, room: pos[c.id] });
-      this.post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
     }
     this.fire('start');
     return null;
@@ -494,7 +497,6 @@ export class Room {
     const s = this.state;
     if (s.over) return;
     if (success) {
-      for (const c of this.cast) this.post({ type: 'say', text: voiceLine(c.personality, 'escape'), charId: c.id });
       const used = Math.round((this.scenario.timeLimit * 1000 - this.timeLeft()) / 1000);
       this.post({ type: 'sys', text: `탈출 성공! 소요 시간 ${Math.floor(used / 60)}분 ${used % 60}초`, global: true, sfx: 'win' });
     } else {
@@ -518,6 +520,7 @@ export class Room {
 
   dispatch(player, msg) {
     if (msg.t === 'kick') return this.kick(player, msg.id);
+    if (msg.t === 'option') return this.setOption(player, msg);
     if (this.phase === 'lobby') {
       if (msg.t === 'start') {
         if (player.token !== this.hostToken) return '방장만 시작할 수 있어요.';
@@ -585,6 +588,18 @@ export class Room {
     return null;
   }
 
+  // 방장만 바꿀 수 있다. 게임 중에 바꾸면 모두에게 알린다.
+  setOption(player, msg) {
+    if (player.token !== this.hostToken) return '방장만 바꿀 수 있어요.';
+    if (typeof msg.autoHint !== 'boolean' || msg.autoHint === this.options.autoHint) return null;
+    this.options.autoHint = msg.autoHint;
+    if (this.state) this.state.lastProgress = Date.now();
+    if (this.phase === 'play') {
+      this.post({ type: 'sys', text: `방장이 자동 힌트를 ${msg.autoHint ? '켰다. 한동안 진전이 없으면 힌트가 나온다' : '껐다'}.`, global: true, icon: 'bulb' });
+    }
+    return null;
+  }
+
   // 시간이 깎이는 힌트는 지금 플레이 중인 멤버 과반수가 찬성해야 나온다
   hintNeed() { return Math.floor(Math.max(1, this.activeCast().length) / 2) + 1; }
   voteHint(c) {
@@ -606,7 +621,6 @@ export class Room {
     if (!link) return '여기서 바로 갈 수 없는 곳이에요.';
     if (!this.linkOpen(link)) {
       this.post({ type: 'act', text: '문을 밀어 보지만 꿈쩍도 하지 않는다.', charId: c.id });
-      this.post({ type: 'say', text: voiceLine(c.personality, 'blocked'), charId: c.id });
       return null;
     }
     const first = !this.knows(c.id, to);
@@ -616,7 +630,6 @@ export class Room {
     this.post({ type: 'act', text: '들어왔다.', charId: c.id, sfx: 'step' });
     if (first) {
       this.post({ type: 'narr', text: this.room(to).desc, room: to });
-      this.post({ type: 'say', text: voiceLine(c.personality, 'move'), charId: c.id });
     }
     const met = this.membersIn(to).filter((m) => m.id !== c.id);
     if (met.length) this.post({ type: 'sys', text: `${josa(met.map((m) => m.name).join(', '), '과', '와')} 합류했다!`, room: to });
@@ -635,14 +648,12 @@ export class Room {
     const here = s.pos[c.id];
     if (obj.needItem && !s.inv[c.id].includes(obj.needItem)) {
       this.post({ type: 'narr', text: obj.lackText, room: here });
-      this.post({ type: 'say', text: voiceLine(c.personality, 'blocked'), charId: c.id });
       return true;
     }
     if (obj.needAll) {
       const missing = this.activeCast().filter((m) => s.pos[m.id] !== here);
       if (missing.length) {
         this.post({ type: 'sys', text: `전원 탑승 확인 실패 — 아직 ${missing.length}명이 오지 않았다.`, room: here });
-        this.post({ type: 'say', text: voiceLine(c.personality, 'blocked'), charId: c.id });
         return true;
       }
       const left = this.cast.filter((m) => !m.gone && !this.isActive(m.id) && s.pos[m.id] !== here);
@@ -666,7 +677,6 @@ export class Room {
       const lines = this.cast.map((m) => `${m.name}: ${this.room(s.pos[m.id]).name}`).join(' / ');
       this.post({ type: 'sys', text: lines, room: here, icon: 'monitor' });
       for (const m of this.membersIn(here)) for (const other of this.cast) this.learn(m.id, s.pos[other.id]);
-      this.post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
       return null;
     }
     if (this.blocked(c, obj)) return null;
@@ -687,7 +697,6 @@ export class Room {
       return null;
     }
     if (obj.onSolve) return this.solve(c, obj);
-    this.post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
     return null;
   }
 
@@ -709,7 +718,6 @@ export class Room {
     this.post({ type: 'act', text: `${obj.name}에 "${value}" 입력!`, charId: c.id });
     if (value.toUpperCase() === obj.lock.answer.toUpperCase()) return this.solve(c, obj);
     this.post({ type: 'narr', text: '삐빅— 틀렸다.', room: here, sfx: 'wrong' });
-    this.post({ type: 'say', text: voiceLine(c.personality, 'fail'), charId: c.id });
     if (c.skill === 'luck') {
       this.post({ type: 'sys', text: `${c.name}의 행운 — 시간이 줄지 않았다.`, room: here, icon: 'clover' });
     } else {
@@ -746,9 +754,6 @@ export class Room {
       s.inv[c.id].push(r.item);
       const it = this.scenario.items[r.item];
       this.post({ type: 'sys', text: `${c.name} — ${josa(it.name, '을', '를')} 얻었다!`, room: here, icon: it.icon });
-      this.post({ type: 'say', text: voiceLine(c.personality, 'item'), charId: c.id });
-    } else {
-      this.post({ type: 'say', text: voiceLine(c.personality, 'success'), charId: c.id });
     }
     if (r.ending) return this.end(true);
     this.fire('solve', { char: c, room: here, obj: obj.id });

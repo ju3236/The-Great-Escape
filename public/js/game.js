@@ -591,6 +591,7 @@ function renderLobby() {
       ${kick}<span class="dot ${p.online ? 'on' : ''}" title="${p.online ? '접속 중' : '연결 끊김'}"></span></li>`;
   }).join('');
   $('#btn-change-char').hidden = view.me.isGM;
+  renderOptions('#lobby-options');
   const castCount = view.players.filter((p) => !p.isGM).length;
   $('#btn-lobby-start').hidden = !view.me.isHost;
   $('#btn-lobby-start').disabled = castCount === 0;
@@ -608,6 +609,19 @@ document.addEventListener('click', (e) => {
   const p = view.players.find((x) => x.id === b.dataset.kick);
   const name = p?.isGM ? '진행자' : p?.char?.name || '이 멤버';
   if (confirm(`${name}을(를) 방에서 내보낼까요? 다시 들어오려면 새로 참가해야 해요.`)) send({ t: 'kick', id: b.dataset.kick });
+});
+
+// 방 설정: 방장은 바꾸고, 다른 사람은 지금 상태를 본다
+function renderOptions(sel) {
+  const on = !!view.options?.autoHint;
+  const desc = '5분 동안 아무 퍼즐도 못 풀면 힌트가 자동으로 나와요 (시간은 안 줄어요).';
+  $(sel).innerHTML = view.me.isHost
+    ? `<label class="check"><input type="checkbox" data-option="autoHint" ${on ? 'checked' : ''}> 자동 힌트</label><p class="muted small">${desc}</p>`
+    : `<p class="small">자동 힌트: <b>${on ? '켜짐' : '꺼짐'}</b></p><p class="muted small">${desc} 방장이 바꿀 수 있어요.</p>`;
+}
+document.addEventListener('change', (e) => {
+  const box = e.target.closest('[data-option]');
+  if (box) send({ t: 'option', [box.dataset.option]: box.checked });
 });
 
 const charDlg = $('#char-dialog');
@@ -709,6 +723,7 @@ function renderGame() {
     $('#btn-hint').textContent = h.votes ? `힌트 찬성 ${h.votes}/${h.need}` : '힌트 (-3분)';
     $('#btn-hint').classList.toggle('voted', h.mine);
   }
+  renderOptions('#game-options');
   $('#resume-info').innerHTML = `다른 기기로 이어하기<br>초대 코드 <b>${esc(view.code)}</b> · 복귀 번호 <b>${esc(view.me.pin)}</b>`;
 }
 
