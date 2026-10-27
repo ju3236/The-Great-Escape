@@ -64,3 +64,5 @@ function voiceLine(personality, kind) {
   const set = (PERSONALITIES[personality] || PERSONALITIES.calm)[kind] || [];
   return set[Math.floor(Math.random() * set.length)] || '';
 }
+
+if (typeof module !== 'undefined') module.exports = { PERSONALITIES, SKILLS, voiceLine };
