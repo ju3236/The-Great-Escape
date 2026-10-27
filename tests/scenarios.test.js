@@ -35,6 +35,7 @@ for (const sc of SCENARIOS) {
     const byId = Object.fromEntries(objects.map((o) => [o.id, o]));
     for (const h of sc.hints) if (byId[h.until]) assert.ok(byId[h.until].onSolve, `풀 수 없는 힌트 대상: ${h.until}`);
     assert.ok(objects.some((o) => o.onSolve?.ending), '탈출 지점이 있어야 한다');
+    assert.ok(sc.epilogue?.length, '탈출 후 보여 줄 진상이 있어야 한다');
 
     for (const ev of sc.events || []) {
       if (ev.obj) assert.ok(objIds.has(ev.obj), `이벤트 오브젝트 없음: ${ev.id}`);

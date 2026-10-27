@@ -610,6 +610,8 @@ export class Room {
       over: s.over,
       result: s.result,
       endText: s.endText || null,
+      // 진상은 게임이 끝난 뒤에만 보낸다
+      epilogue: this.phase === 'ended' ? this.scenario.epilogue || null : null,
       map: { ...this.scenario.map, rooms: mapRooms, links: mapLinks },
       // 내 캐릭터들이 있는 구역마다의 정보 (진행자는 모든 구역)
       rooms: Object.fromEntries((p.isGM ? Object.keys(this.scenario.rooms) : [...myRooms]).map((id) => [id, detail(id)])),

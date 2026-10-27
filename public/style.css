@@ -414,6 +414,15 @@ dialog h3 { color: var(--text); font-size: 15px; display: flex; align-items: cen
 }
 
 
+.truth { margin: 0 auto 28px; text-align: left; }
+.truth h2 { text-align: center; font-size: 18px; color: var(--accent); margin: 0 0 12px; }
+.truth-text { min-height: 0; max-height: 46vh; overflow-y: auto; line-height: 1.75; }
+.truth-text p { display: block; animation: fadein .8s both; }
+.truth-text p:last-child { color: var(--text); }
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+.truth-btn { display: block; margin: 0 auto 24px; }
+html.no-fx .truth-text p { animation: none; }
+
 /* ===== 친구와 플레이 ===== */
 .online-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 20px 16px; max-width: 1000px; margin: 0 auto; }
 .small { font-size: 12px; }

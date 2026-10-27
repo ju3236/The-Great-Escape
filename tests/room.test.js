@@ -526,3 +526,13 @@ test('모든 사람의 로그는 게임이 끝난 뒤에만 받을 수 있다', 
   assert.ok(box && box.only === p1.id, '다른 사람이 혼자 본 문구도 누가 봤는지와 함께 들어간다');
   assert.ok(full.msgs.every((m) => !String(m.text).includes('SECRETANSWER')));
 });
+
+test('진상은 게임이 끝난 뒤에만 화면 정보에 들어간다', () => {
+  const env = setup(['가']);
+  env.room.scenario = { ...FIXTURE, epilogue: ['사실은…'] };
+  start(env, ['a']);
+  const [p1] = env.players;
+  assert.equal(env.room.view(p1).epilogue, null);
+  env.room.end(true);
+  assert.deepEqual(env.room.view(p1).epilogue, ['사실은…']);
+});
