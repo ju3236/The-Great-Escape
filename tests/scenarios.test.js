@@ -31,6 +31,9 @@ for (const sc of SCENARIOS) {
     }
     for (const it of Object.values(sc.items)) assert.ok(ctx.ICONS[it.icon], `아이템 아이콘 없음: ${it.icon}`);
     for (const h of sc.hints) assert.ok(known(h.until), `힌트 대상 없음: ${h.until}`);
+    // 힌트는 대상이 풀려야 다음으로 넘어가므로, 풀 수 없는 물건을 가리키면 힌트가 멈춘다
+    const byId = Object.fromEntries(objects.map((o) => [o.id, o]));
+    for (const h of sc.hints) if (byId[h.until]) assert.ok(byId[h.until].onSolve, `풀 수 없는 힌트 대상: ${h.until}`);
     assert.ok(objects.some((o) => o.onSolve?.ending), '탈출 지점이 있어야 한다');
 
     for (const ev of sc.events || []) {
