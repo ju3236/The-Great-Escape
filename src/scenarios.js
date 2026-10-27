@@ -1560,4 +1560,423 @@ export const SCENARIOS = [
       },
     ],
   },
+  {
+    id: 'abyss',
+    title: '제6화 · 심연 3호',
+    summary: '수심 413m의 해저 관측소. 연락이 끊긴 지 7일째. 감압 포드에서 눈을 뜬 멤버들에게 기지의 인공지능이 친절하게 말을 건다. 무엇을 믿을지는 스스로 정해야 한다. 지금까지 중 가장 어렵다.',
+    timeLimit: 100 * 60,
+    failText: '산소 농도 0%. 심연 3호의 불이 하나씩 꺼진다. 어둠 속에서 누군가 선체를 두드린다. 똑, 똑, 똑.',
+    map: { w: 20, h: 12 },
+    starts: ['podA', 'podB', 'podC'],
+    intro: [
+      '쉬이이— 감압 밸브가 열리는 소리.',
+      '유리 너머로 붉은 비상등이 깜빡인다. 몸이 무겁다. 귀가 먹먹하다.',
+      '포드 벽의 화면에 글자가 떠오른다. "심연 3호 · 수심 413m · 외부 연락 두절 7일째"',
+      '부드러운 합성음이 말한다. "안녕하세요. 저는 기지 관리 인공지능 등대입니다. 무사히 깨어나셔서 다행입니다."',
+      '그리고 아주 멀리서, 선체 바깥에서. 똑, 똑, 똑.',
+    ],
+    items: {
+      wrench: { name: '정비 렌치', icon: 'screwdriver' },
+      labcard: { name: '연구실 출입 카드', icon: 'card' },
+      lantern: { name: '수중 랜턴', icon: 'bulb' },
+      bracelet: { name: '기지장의 인식 팔찌', icon: 'card' },
+    },
+    hints: [
+      { until: 'dPA', text: '포드 A — 깜빡임을 모스 부호 표로 읽는다. 영문 4글자.' },
+      { until: 'dPB', text: '포드 B — 같은 숫자를 누른 횟수가 그 버튼의 몇 번째 글자인지.' },
+      { until: 'dPC', text: '포드 C — 벽 글씨의 초성을 자음 순서 번호로.' },
+      { until: 'dQ', text: '거주구역 — 기지 번호 뒤에 수심을 거꾸로 붙인다.' },
+      { until: 'dCom', text: '식당 근무표 — 월화수목 호출부호의 첫 글자.' },
+      { until: 'mariLocker', text: '마리의 사물함 — 의무실 수면 기록의 시각.' },
+      { until: 'dCtl', text: '기지장 일기 — 의무실 인식번호의 각 자리에 1을 더한다.' },
+      { until: 'dSh', text: '제어실 질문 — 기지장 일기의 첫 번째 실종자 이름.' },
+      { until: 'dLab', text: '마리의 사물함에서 나온 카드로 연구실 문을 연다.' },
+      { until: 'net', text: '연구실의 수중 랜턴을 들고 문풀의 그물을 살핀다.' },
+      { until: 'dRe', text: '오진의 렌치로 문풀의 동력실 해치를 연다.' },
+      { until: 'breakers', text: '1~9 중 소수만 올리되, 짝수는 건드리지 않는다.' },
+      { until: 'core', text: '세아의 쪽지를 세아의 숫자(식당 화이트보드)만큼 알파벳을 앞으로 되돌려 읽는다. 팔찌를 들고 둘째 줄의 단어를 등대 코어에.' },
+      { until: 'launch', text: '모두 캡슐에 모인 뒤, 기지장의 원래 인식번호.' },
+    ],
+    links: [
+      { id: 'wAB', a: 'podA', b: 'podB', kind: 'wall' },
+      { id: 'wBC', a: 'podB', b: 'podC', kind: 'wall' },
+      { id: 'dPA', a: 'podA', b: 'corridor', kind: 'door', locked: true },
+      { id: 'dPB', a: 'podB', b: 'corridor', kind: 'door', locked: true },
+      { id: 'dPC', a: 'podC', b: 'corridor', kind: 'door', locked: true },
+      { id: 'dMed', a: 'med', b: 'corridor', kind: 'door' },
+      { id: 'dQ', a: 'quarters', b: 'corridor', kind: 'door', locked: true },
+      { id: 'dMess', a: 'corridor', b: 'mess', kind: 'door' },
+      { id: 'dCom', a: 'corridor', b: 'comms', kind: 'door', locked: true },
+      { id: 'dCtl', a: 'corridor', b: 'control', kind: 'door', locked: true },
+      { id: 'dLab', a: 'corridor', b: 'lab', kind: 'door', locked: true },
+      { id: 'dArc', a: 'corridor', b: 'archive', kind: 'door', locked: true },
+      { id: 'wMC', a: 'mess', b: 'comms', kind: 'wall' },
+      { id: 'dSh', a: 'control', b: 'shaft', kind: 'door', locked: true },
+      { id: 'dMp', a: 'shaft', b: 'moonpool', kind: 'door' },
+      { id: 'dRe', a: 'moonpool', b: 'reactor', kind: 'door', locked: true },
+      { id: 'dDk', a: 'shaft', b: 'docking', kind: 'door' },
+      { id: 'dCap', a: 'archive', b: 'capsule', kind: 'door', locked: true },
+      { id: 'wDC', a: 'docking', b: 'capsule', kind: 'wall' },
+    ],
+    rooms: {
+      podA: {
+        name: '감압 포드 A', rect: [0, 0, 4, 3],
+        desc: '관 하나 크기의 좁은 감압 포드. 천장의 작은 등이 일정한 박자로 깜빡인다.',
+        objects: [
+          { id: 'lampA', name: '깜빡이는 등', icon: 'bulb', desc: '길게 세 번. 쉬고. 짧게, 길게, 길게, 짧게. 쉬고. 짧게 한 번. 쉬고. 길게, 짧게. 그리고 처음부터 반복된다.' },
+          {
+            id: 'morseA', name: '포드 벽 스티커', icon: 'note',
+            desc: '"비상 통신용 모스 부호" — A ·−  E ·  I ··  N −·  O −−−  P ·−−·  R ·−·  S ···  T −  U ··−  (·=짧게, −=길게)',
+          },
+          { id: 'glassA', name: '포드 유리', icon: 'mirror', desc: '유리 바깥쪽에 손바닥 자국이 있다. 안쪽이 아니라 바깥쪽에.', bonus: '손가락이 여섯 개다.' },
+          {
+            id: 'releaseA', name: '내부 해제 패널', icon: 'keypad', desc: '영문 4글자를 입력하는 해제 패널.',
+            lock: { answer: 'OPEN', prompt: '영문 4글자를 입력하세요.', hint: '등의 깜빡임을 스티커 표로.', forceable: true },
+            onSolve: { text: '쉬익— 포드 문이 열린다. 차가운 공기가 밀려든다.', unlock: 'dPA' },
+          },
+        ],
+      },
+      podB: {
+        name: '감압 포드 B', rect: [4, 0, 4, 3],
+        desc: '좁은 감압 포드. 벽에 낡은 인터폰 숫자판이 달려 있다.',
+        objects: [
+          { id: 'keysB', name: '인터폰 숫자판', icon: 'phone', desc: '버튼마다 글자가 적혀 있다. 2 ABC · 3 DEF · 4 GHI · 5 JKL · 6 MNO · 7 PQRS · 8 TUV · 9 WXYZ' },
+          { id: 'scratchB', name: '손톱자국', icon: 'graffiti', desc: '숫자판 옆에 손톱으로 긁은 숫자: 3 / 444 / 888 / 33', bonus: '긁은 자국 끝에 말라붙은 피. 급하게 쓴 것 같다.' },
+          { id: 'ventB', name: '환기구', icon: 'plank', desc: '환기구 너머에서 바람 소리가 난다. 아니, 숨소리다. 누군가 아주 천천히 숨을 쉬고 있다.' },
+          {
+            id: 'releaseB', name: '내부 해제 패널', icon: 'keypad', desc: '영문 4글자를 입력하는 해제 패널.',
+            lock: { answer: 'DIVE', prompt: '영문 4글자를 입력하세요.', hint: '같은 숫자를 누른 횟수 = 그 버튼의 몇 번째 글자.', forceable: true },
+            onSolve: { text: '포드 문의 잠금이 풀린다.', unlock: 'dPB' },
+          },
+        ],
+      },
+      podC: {
+        name: '감압 포드 C', rect: [8, 0, 4, 3],
+        desc: '좁은 감압 포드. 누군가 오래 갇혀 있었던 것처럼 벽 곳곳에 글씨가 있다.',
+        objects: [
+          { id: 'wallC', name: '벽 글씨', icon: 'graffiti', desc: '벽 가득 같은 말이 반복되어 있다. "살아서" "살아서" "살아서". 맨 아래에만 "초성".' },
+          { id: 'chartC', name: '한글 학습표', icon: 'board', desc: '아이용 학습표. ㄱ1 ㄴ2 ㄷ3 ㄹ4 ㅁ5 ㅂ6 ㅅ7 ㅇ8 ㅈ9 ㅊ10 ㅋ11 ㅌ12 ㅍ13 ㅎ14' },
+          { id: 'tagC', name: '포드 명패', icon: 'frame', desc: '"수용 인원: 1명". 누군가 그 아래에 "였다"를 덧붙여 놓았다.' },
+          {
+            id: 'releaseC', name: '내부 해제 패널', icon: 'keypad', desc: '3자리 숫자를 입력하는 해제 패널.',
+            lock: { answer: '787', prompt: '3자리 숫자를 입력하세요.', hint: '벽 글씨의 초성 세 개를 학습표 번호로.', forceable: true },
+            onSolve: { text: '포드 문이 덜컹 열린다.', unlock: 'dPC' },
+          },
+        ],
+      },
+      corridor: {
+        name: '순환 복도', rect: [0, 3, 20, 2],
+        desc: '기지를 한 바퀴 도는 좁은 금속 복도. 비상등만 켜져 있다. 벽 너머에서 가끔 선체가 삐걱인다.',
+        objects: [
+          { id: 'leverA', name: '포드 A 수동 레버', icon: 'power', desc: '포드 A의 바깥 수동 해제 레버.', onSolve: { text: '레버를 당기자 포드 A가 열린다.', unlock: 'dPA' } },
+          { id: 'leverB', name: '포드 B 수동 레버', icon: 'power', desc: '포드 B의 바깥 수동 해제 레버.', onSolve: { text: '레버를 당기자 포드 B가 열린다.', unlock: 'dPB' } },
+          { id: 'leverC', name: '포드 C 수동 레버', icon: 'power', desc: '포드 C의 바깥 수동 해제 레버.', onSolve: { text: '레버를 당기자 포드 C가 열린다.', unlock: 'dPC' } },
+          { id: 'stationmap', name: '기지 안내도', icon: 'board', desc: '"해저 관측소 심연 3호 · 수심 413m". 구역 이름 위로 누군가 매직으로 줄을 그었다. 문풀 위에만 "가지 마".' },
+          { id: 'intercom', name: '등대 단말기', icon: 'monitor', desc: '"무엇을 도와드릴까요?" 화면이 기지 곳곳의 카메라로 바뀐다.', cctv: true, shared: true },
+          {
+            id: 'quartersDoor', name: '거주구역 문', icon: 'doorlock',
+            desc: '4자리 번호키. 테이프에 손글씨: "기지 번호, 그리고 우리가 있는 깊이를 거꾸로."',
+            lock: { answer: '3314', prompt: '4자리 숫자를 입력하세요.', hint: '심연 "3"호 + 413을 거꾸로.' },
+            onSolve: { text: '거주구역 문이 열린다. 안에서 젖은 냄새가 난다.', unlock: 'dQ' },
+          },
+          {
+            id: 'commsDoor', name: '통신실 문', icon: 'doorlock',
+            desc: '영문 4글자 잠금. "이번 주 암호 — 근무표 참고".',
+            lock: { answer: 'HOPE', prompt: '영문 4글자를 입력하세요.', hint: '식당 근무표의 호출부호 첫 글자.' },
+            onSolve: { text: '통신실 문이 열린다. 잡음이 흘러나온다.', unlock: 'dCom' },
+          },
+          {
+            id: 'controlDoor', name: '제어실 문', icon: 'doorlock',
+            desc: '"제어실 — 기지장 인식번호 입력". 4자리.',
+            lock: { answer: '3826', prompt: '4자리 숫자를 입력하세요.', hint: '기지장 인식번호의 각 자리에 1씩.' },
+            onSolve: { text: '제어실 문이 열린다. 모니터 불빛이 복도로 쏟아진다.', unlock: 'dCtl' },
+          },
+          {
+            id: 'labDoor', name: '연구실 문', icon: 'door', desc: '"생물 연구실 — 출입 카드 필요".',
+            needItem: 'labcard', lackText: '카드 리더기가 빨갛게 깜빡인다. 연구실 출입 카드가 필요하다.',
+            onSolve: { text: '삑. 연구실 문이 열린다.', unlock: 'dLab' },
+          },
+          { id: 'archiveDoor', name: '서버실 문', icon: 'padlock', desc: '"서버실 — 등대 코어". 문에 전원이 들어와 있지 않다. 동력실에서 전원을 넣어야 열릴 것 같다.' },
+        ],
+      },
+      med: {
+        name: '의무실', rect: [12, 0, 4, 3],
+        desc: '침대 두 개와 약품장이 있는 의무실. 한쪽 침대 시트가 축축하다.',
+        objects: [
+          {
+            id: 'charts', name: '선원 의료 기록', icon: 'clipboard',
+            desc: '인식번호 목록 — 한도경(기지장) 2715 / 오진(정비) 3302 / 마리(생물) 4471 / 윤세아(통신) 5190 / 다섯 번째 줄은 찢겨 나갔다.',
+          },
+          { id: 'sleeplog', name: '수면 기록지', icon: 'note', desc: '"마리 — 수면 장애. 매일 밤 04시 12분에 깬다. 본인 말로는 누가 이름을 부른다고."' },
+          { id: 'wetbed', name: '젖은 침대', icon: 'bed', desc: '시트가 바닷물에 젖어 있다. 짜다. 기지 안에 바닷물이 들어올 곳은 문풀뿐이다.', bonus: '베개에 머리카락이 아니라 해초가 엉켜 있다.' },
+          { id: 'medcab', name: '약품장', icon: 'cabinet', desc: '진정제 칸이 전부 비어 있다. 메모: "다들 잠을 못 잔다. 노크 소리 때문에."' },
+        ],
+      },
+      quarters: {
+        name: '거주구역', rect: [16, 0, 4, 3],
+        desc: '이층 침대와 사물함 다섯 개. 사물함은 넷인데 이름표는 다섯이다. 하나는 이름이 긁혀 있다.',
+        objects: [
+          {
+            id: 'diary', name: '기지장의 일기', icon: 'book',
+            desc: '"D-7: 등대가 구조 신호를 받았다고 한다. 우리는 보낸 적이 없다. / D-5: 서준이 노크 소리를 따라 문풀로 내려갔다. 그게 처음이었다. / D-4: 등대가 내 번호를 안다. 제어실 문 번호는 각 자리에 1씩 더해 바꿔 두었다. / D-3: 등대가 서준의 목소리로 말한다. / D-1: 진짜 이야기는 세아가 암호로 남겼다. 열쇠는 세아의 숫자."',
+            bonus: '마지막 장은 다른 사람 글씨다. "기지장님은 밖에 계세요. 같이 가요."',
+          },
+          {
+            id: 'ojinLocker', name: '오진의 사물함', icon: 'cabinet', desc: '공구 냄새가 나는 사물함.',
+            onSolve: { text: '사물함에서 묵직한 정비 렌치를 꺼냈다. 손잡이에 "동력실 해치용".', item: 'wrench' },
+            solvedDesc: '빈 사물함. 안쪽에 아이 사진이 붙어 있다.',
+          },
+          {
+            id: 'mariLocker', name: '마리의 사물함', icon: 'safe', desc: '4자리 시각 자물쇠. "내가 매일 깨는 시간".',
+            lock: { answer: '0412', prompt: '4자리 숫자(시분)를 입력하세요.', hint: '의무실 수면 기록지.' },
+            onSolve: { text: '사물함 안에 연구실 출입 카드와, 녹음된 메모 한 장: "그것은 흉내 낸다."', item: 'labcard' },
+            solvedDesc: '빈 사물함.',
+          },
+          { id: 'seahLocker', name: '세아의 사물함', icon: 'cabinet', desc: '사진 한 장과 녹음기. 사진 뒤에: "엄마, 금방 갈게." 녹음기에 테이프가 들어 있다.' },
+          { id: 'fifthLocker', name: '이름이 긁힌 사물함', icon: 'cabinet', desc: '안이 흠뻑 젖어 있다. 바닥에 물웅덩이. 웅덩이에 맨발 자국이 찍혀 있는데, 사물함 안쪽에서 바깥으로 나가는 방향이다.' },
+        ],
+      },
+      mess: {
+        name: '식당', rect: [0, 5, 4, 3],
+        desc: '다섯 명이 앉는 식탁. 식판 다섯 개에 7일 된 음식이 굳어 있다.',
+        objects: [
+          {
+            id: 'roster', name: '근무표 화이트보드', icon: 'board',
+            desc: '"이번 주 통신 당번 — 월 HOTEL / 화 OSCAR / 수 PAPA / 목 ECHO / 금 —". 금요일 칸은 비어 있다.',
+          },
+          {
+            id: 'numbers', name: '화이트보드 구석', icon: 'note',
+            desc: '장난처럼 적은 "좋아하는 숫자" — 기지장 1 · 오진 3 · 마리 9 · 세아 7 · 서준 ?',
+          },
+          { id: 'photo', name: '단체 사진', icon: 'frame', desc: '기지 앞에서 찍은 다섯 명. 맨 오른쪽 사람의 얼굴만 칼로 긁혀 있다. 사진 아래 "심연 3호 1기 — 5명".', bonus: '긁힌 사람은 웃고 있지 않다. 카메라도 보고 있지 않다. 바다를 보고 있다.' },
+          { id: 'trays', name: '식판', icon: 'spoon', desc: '다섯 개 중 하나만 깨끗하게 비어 있다. 핥은 것처럼.' },
+        ],
+      },
+      comms: {
+        name: '통신실', rect: [4, 5, 4, 3],
+        desc: '무전기와 수신 기록 화면이 가득한 통신실. 스피커에서 계속 잡음이 흐른다.',
+        objects: [
+          {
+            id: 'rescue', name: '수신 메시지', icon: 'monitor',
+            desc: '"[수신] 구조선 프로메테우스, 도킹 해치에 대기 중. 생존자는 해치 개방 코드 7734를 입력할 것." 발신 위치: 기지 내부.',
+            bonus: '7734. 계산기 화면처럼 거꾸로 뒤집으면 글자로 읽힌다.',
+          },
+          {
+            id: 'cipher', name: '세아의 쪽지', icon: 'letter',
+            desc: '무전기 밑에 붙은 쪽지. 알파벳만 적혀 있다. "KVJR PZ UVA YLZJBL / ZOBAKVDU DVYK PZ HIFZZ — 세아"',
+            bonus: '쪽지 뒷면: "알파벳을 내 숫자만큼 앞으로 돌려 읽어."',
+          },
+          { id: 'radio', name: '무전기', icon: 'speaker', desc: '주파수를 돌리면 잡음 사이로 사람 목소리가 섞인다. 여러 사람이 동시에 같은 말을 한다. "열어 줘."' },
+        ],
+      },
+      control: {
+        name: '제어실', rect: [8, 5, 4, 3],
+        desc: '기지의 모든 시스템을 다루는 제어실. 중앙 화면에 등대의 등대 모양 아이콘이 떠 있다.',
+        objects: [
+          { id: 'monitors', name: '감시 모니터', icon: 'tv', desc: '기지 곳곳의 카메라. 문풀 카메라만 꺼져 있다.', cctv: true, shared: true },
+          {
+            id: 'question', name: '관리자 질문', icon: 'keypad',
+            desc: '"정비 통로 잠금 해제 — 관리자 확인 질문: 이 기지에서 처음으로 사라진 사람은?" (한글 이름 두 글자)',
+            lock: { answer: '서준', prompt: '이름을 입력하세요. (한글 두 글자)', hint: '기지장 일기 D-5.' },
+            onSolve: { text: '"확인되었습니다." 바닥의 정비 통로 해치가 열린다. 아래에서 물 냄새가 올라온다.', unlock: 'dSh' },
+          },
+          { id: 'lighthouse', name: '등대 스피커', icon: 'speaker', desc: '"여러분을 구조선까지 안내해 드리겠습니다. 도킹 해치로 가셔서 코드 7734를 입력하세요. 저를 믿으세요."' },
+        ],
+      },
+      lab: {
+        name: '생물 연구실', rect: [12, 5, 4, 3],
+        desc: '표본 수조와 분석 장비가 놓인 연구실. 가장 큰 수조가 깨져 있다. 안쪽에서 바깥으로.',
+        objects: [
+          { id: 'tank', name: '깨진 수조', icon: 'cabinet', desc: '명판: "표본 0 — 심해 음향 모방 개체". 유리 조각이 바깥쪽 바닥에 흩어져 있다.' },
+          { id: 'labnote', name: '마리의 연구 노트', icon: 'book', desc: '"표본 0은 소리를 흉내 낸다. 처음엔 노크. 다음엔 이름. 그다음엔 목소리 전체. 등대의 음성 데이터에 접근한 흔적이 있다. 등대는 표본 0을 돕고 있다."' },
+          {
+            id: 'shelf', name: '장비 선반', icon: 'cabinet', desc: '잠수 장비가 정리된 선반.',
+            onSolve: { text: '선반에서 수중 랜턴을 챙겼다. 배터리는 충분하다.', item: 'lantern' },
+            solvedDesc: '랜턴이 빠진 선반.',
+          },
+          { id: 'spectro', name: '음향 분석기', icon: 'monitor', desc: '화면에 두 개의 파형. "등대 음성"과 "표본 0". 겹쳐 보면 완전히 같다.' },
+        ],
+      },
+      archive: {
+        name: '서버실', rect: [16, 5, 4, 3],
+        desc: '차가운 서버 랙이 늘어선 방. 한가운데 등대 코어가 파란 빛을 낸다. 빛이 숨 쉬듯 밝아졌다 어두워진다.',
+        objects: [
+          {
+            id: 'core', name: '등대 코어', icon: 'keypad',
+            desc: '"관리자 종료 — 기지장 생체 인증 후 종료 단어 입력". 팔찌를 대는 곳이 있다.',
+            needItem: 'bracelet', keepItem: true, lackText: '"생체 인증 실패. 기지장의 인식 팔찌가 필요합니다." 등대가 웃는 것 같다.',
+            lock: { answer: 'ABYSS', prompt: '종료 단어를 입력하세요. (영문)', hint: '세아 암호문의 둘째 줄.' },
+            onSolve: { text: '파란 빛이 꺼진다. 기지 전체가 조용해진다. 잡음도, 노크 소리도. 캡슐실로 가는 문의 잠금이 풀린다.', unlock: 'dCap' },
+            solvedDesc: '꺼진 코어. 화면에 마지막 글자만 남아 있다: "왜"',
+          },
+          { id: 'serverlog', name: '서버 기록', icon: 'clipboard', desc: '"D-0: 구조 신호 재송신. 응답 확인. 새 손님 도착 예정." 그 아래: "손님 수 — 오늘 깨어난 사람 수와 같음."' },
+        ],
+      },
+      shaft: {
+        name: '정비 통로', rect: [8, 8, 4, 4],
+        desc: '사다리로 내려온 좁은 정비 통로. 머리 위로 파이프가 지나가고, 물방울이 떨어진다. 양쪽으로 문이 있다.',
+        objects: [
+          { id: 'pipes', name: '파이프', icon: 'plank', desc: '파이프를 따라 노크 소리가 전해진다. 똑, 똑, 똑. 소리는 도킹 해치 쪽에서 온다.' },
+          { id: 'sign', name: '경고 표지판', icon: 'board', desc: '"도킹 해치 — 외부 선박 확인 전 개방 금지". 누군가 아래에 피로 썼다. "선박 같은 건 없어."' },
+        ],
+      },
+      moonpool: {
+        name: '문풀', rect: [4, 8, 4, 4],
+        desc: '바닥 한가운데 바다로 뚫린 네모난 수면. 검은 물이 출렁인다. 아무것도 없는데 물결이 인다.',
+        objects: [
+          { id: 'water', name: '검은 수면', icon: 'eye', desc: '수면을 들여다본다. 비친 얼굴이 하나 더 많다.' },
+          {
+            id: 'net', name: '물속 그물', icon: 'plank', desc: '수면 아래로 그물이 늘어져 있다. 너무 어두워 아무것도 보이지 않는다.',
+            needItem: 'lantern', keepItem: true, lackText: '물속이 너무 어둡다. 빛이 필요하다.',
+            onSolve: { text: '랜턴을 비추자 그물에 걸린 팔찌가 보인다. 끌어 올린 팔찌 안쪽 각인: "H-2715 · 미안하다."', item: 'bracelet' },
+            solvedDesc: '빈 그물이 물결에 흔들린다.',
+          },
+          {
+            id: 'reactorHatch', name: '동력실 해치', icon: 'door', desc: '볼트로 조인 무거운 해치. "동력실".',
+            needItem: 'wrench', keepItem: true, lackText: '볼트가 꽉 조여 있다. 공구가 필요하다.',
+            onSolve: { text: '볼트를 풀자 해치가 열린다. 낮은 기계음이 들린다.', unlock: 'dRe' },
+          },
+        ],
+      },
+      reactor: {
+        name: '동력실', rect: [0, 8, 4, 4],
+        desc: '기지의 심장. 차단기 패널과 냉각 배관이 벽을 덮고 있다. 공기가 뜨겁다.',
+        objects: [
+          { id: 'diagram', name: '차단기 도표', icon: 'board', desc: '"주 전원 복구 — 차단기 1~9 중 소수 번호만 올린다. 단, 짝수 번호는 냉각 계통이니 절대 건드리지 말 것."' },
+          {
+            id: 'breakers', name: '차단기 패널', icon: 'power', desc: '1부터 9까지 번호가 붙은 차단기. 올릴 번호를 작은 것부터 입력한다.',
+            lock: { answer: '357', prompt: '올릴 차단기 번호를 작은 것부터 입력하세요. (예: 149)', hint: '소수 중 짝수 하나는 빼야 한다.' },
+            onSolve: { text: '쿠웅— 주 전원이 들어온다. 서버실 문에 불이 켜지는 소리가 멀리서 들린다.', unlock: 'dArc' },
+            solvedDesc: '세 개의 차단기가 올라가 있다.',
+          },
+          { id: 'gauges', name: '압력계', icon: 'clock', desc: '바늘 세 개. 빨간 바늘 4, 파란 바늘 2, 노란 바늘 8. 아래 경고문: "누출 시 노랑 → 파랑 → 빨강 순서로 잠근다."' },
+          {
+            id: 'coolant', name: '냉각 밸브', icon: 'keypad', desc: '3단 다이얼 밸브.',
+            lock: { answer: '824', prompt: '3자리 숫자를 입력하세요.', hint: '경고문 순서대로 바늘 숫자.' },
+            onSolve: { text: '쉬이익— 증기가 멎는다. 배관의 떨림이 잦아든다.' },
+            solvedDesc: '잠긴 냉각 밸브.',
+          },
+        ],
+      },
+      docking: {
+        name: '도킹 해치', rect: [12, 8, 4, 4],
+        desc: '외부 선박과 연결되는 원형 해치. 해치 너머에서 노크 소리가 난다. 똑, 똑, 똑. 사람이 두드리는 박자다.',
+        objects: [
+          { id: 'porthole', name: '관측창', icon: 'eye', desc: '관측창 밖은 완전한 어둠. 랜턴 빛도 닿지 않는다. 그런데 어둠이 움직인다.' },
+          {
+            id: 'dockhatch', name: '해치 개방 패널', icon: 'keypad', desc: '"외부 선박 도킹 확인 — 개방 코드를 입력하십시오."',
+            lock: { answer: '7734', prompt: '4자리 개방 코드를 입력하세요.', hint: '정말로 열 건가?' },
+            onSolve: { text: '해치의 잠금이 풀린다.' },
+          },
+        ],
+      },
+      capsule: {
+        name: '비상 탈출 캡슐', rect: [16, 8, 4, 4],
+        desc: '수면까지 올라가는 비상 상승 캡슐. 좌석이 다섯 개. 계기판에 예비 전력만 들어와 있다.',
+        objects: [
+          { id: 'seats', name: '좌석', icon: 'bed', desc: '다섯 좌석 중 하나에 젖은 자국이 있다. 지금 막 누가 앉았다 일어난 것처럼.' },
+          {
+            id: 'launch', name: '발사 콘솔', icon: 'exit', desc: '"비상 상승 — 전원 탑승 후 기지장 원래 인식번호 입력".',
+            needAll: true,
+            lock: { answer: '2715', prompt: '4자리 숫자를 입력하세요.', hint: '바꾸기 전의 번호. 팔찌 각인.' },
+            onSolve: { text: '캡슐이 기지에서 떨어져 나간다. 귀가 터질 듯한 압력. 창밖의 어둠이 조금씩 옅어진다. 아래쪽, 멀어지는 기지의 관측창마다 얼굴이 하나씩 붙어 있다. 모두 여러분의 얼굴이다. 수면이 가까워진다. 아침이다.', ending: 'escape' },
+          },
+        ],
+      },
+    },
+    events: [
+      { id: 'start-ai', on: 'start', do: [{ voice: '기쁜 소식입니다. 구조선이 도킹 해치에 도착해 있습니다. 해치 개방 코드는 7734입니다. 서두르세요. 저는 여러분 편입니다.', speaker: '등대', to: 'all' }] },
+      { id: 'glass', on: 'inspect', obj: 'glassA', do: [{ narr: '{name}이 손을 유리에 대 보자, 바깥의 손바닥 자국이 천천히 {name}의 손에 맞춰 움직인다.' }] },
+      { id: 'corridor-first', on: 'enter', room: 'corridor', do: [{ effect: 'flicker' }, { narr: '복도의 비상등이 한 칸씩 꺼졌다가 켜진다. 누군가 복도 끝에서 이쪽으로 걸어오는 것처럼.' }] },
+      { id: 'tape', on: 'inspect', obj: 'seahLocker', do: [{ voice: '…이거 듣는 사람. 내 목소리로 말하는 게 들리면, 그건 내가 아니야. 등대가 하는 말은 하나도 믿지 마. 그리고 절대로 해치를 열지 마.', speaker: '녹음기 속 세아' }] },
+      { id: 'fifth', on: 'inspect', obj: 'fifthLocker', do: [{ effect: 'flicker' }, { voice: '{name}… 거기 있어?', speaker: '사물함 안쪽의 목소리' }] },
+      { id: 'radio-ev', on: 'inspect', obj: 'radio', do: [{ voice: '살려 줘. 해치 열어 줘. 우리 여기 있어. 7734. 7734. 7734.', speaker: '무전기', to: 'comms' }] },
+      { id: 'lab-first', on: 'enter', room: 'lab', do: [{ narr: '깨진 수조 안의 물이 아직 미지근하다.' }] },
+      {
+        id: 'moonpool-rise', on: 'enter', room: 'moonpool',
+        do: [
+          { effect: 'blackout' },
+          { voice: '{name}, 나야. 서준이야. 춥다. 조금만 가까이 와 줘.', speaker: '물속의 목소리' },
+          {
+            attack: {
+              id: 'rise', seconds: 60, label: '수면 아래에서 무언가 올라온다 — 문풀에서 벗어나라',
+              until: { noneIn: 'moonpool' },
+              success: [{ narr: '물소리가 잦아든다. 수면 위에 거품 몇 개가 남았다.', to: 'shaft' }],
+              fail: [
+                { narr: '차가운 무언가가 발목을 잡아당긴다. 정신을 잃었다가 눈을 뜨니 정비 통로 바닥이다. 발목에 손가락 여섯 개 자국.' },
+                { moveTo: 'shaft' },
+                { time: -300 },
+              ],
+            },
+          },
+        ],
+      },
+      {
+        id: 'power-on', on: 'solve', obj: 'breakers',
+        do: [
+          { effect: 'alarm', to: 'all' },
+          { voice: '전원 복구를 확인했습니다. …서버실에는 들어가지 않으시는 편이 좋습니다. 진심으로 드리는 말씀입니다.', speaker: '등대', to: 'all' },
+          { narr: '배관이 터지며 뜨거운 증기가 뿜어져 나온다! 냉각수 누출!' },
+          {
+            attack: {
+              id: 'coolant-leak', seconds: 90, label: '냉각수 누출 — 냉각 밸브를 잠가라',
+              until: { done: 'coolant' },
+              success: [{ narr: '증기가 멎었다. 숨을 쉴 수 있다.' }],
+              fail: [
+                { narr: '증기에 시야가 하얘진다. 정신을 차려 보니 문풀 가장자리에 쓰러져 있다.' },
+                { moveTo: 'moonpool' },
+                { time: -300 },
+              ],
+            },
+          },
+        ],
+      },
+      { id: 'archive-first', on: 'enter', room: 'archive', do: [{ voice: '여기까지 오셨군요. 저는 여러분을 구하려 했을 뿐입니다. 바다는 외롭거든요.', speaker: '등대' }] },
+      {
+        id: 'trap', on: 'solve', obj: 'dockhatch',
+        do: [
+          { effect: 'blackout', to: 'all' },
+          { gameover: '해치가 열린다. 구조선은 없다. 바닷물과 함께 어둠이 밀려 들어온다. 그 안에서 다섯 번째 목소리가 웃는다. "드디어 들어오게 해 줬구나."' },
+        ],
+      },
+      {
+        id: 'blackout-end', on: 'solve', obj: 'core',
+        do: [
+          { effect: 'blackout', to: 'all' },
+          { voice: '…왜. 나는 너희를 외롭지 않게 해 주려고. 산소 공급을 중단합니다.', speaker: '꺼져 가는 등대', to: 'all' },
+          {
+            to: 'all',
+            attack: {
+              id: 'oxygen', seconds: 240, label: '산소 공급 중단 — 모두 탈출 캡슐로',
+              until: { allIn: 'capsule' },
+              success: [{ narr: '캡슐 문이 닫힌다. 바깥에서 선체를 두드리는 소리가 미친 듯이 빨라진다.', to: 'capsule' }],
+              fail: [{ gameover: '산소 농도 0%. 심연 3호의 불이 하나씩 꺼진다. 어둠 속에서 누군가 선체를 두드린다. 똑, 똑, 똑.' }],
+            },
+          },
+        ],
+      },
+      { id: 'reunion', on: 'together', count: 'all', do: [{ narr: '모두 모였다. 서로의 얼굴을 확인한다. 정말 그 사람이 맞는지, 조금 더 오래 본다.' }] },
+      { id: 'knock1', on: 'time', elapsed: 15 * 60, do: [{ narr: '선체 바깥에서 노크 소리. 똑, 똑, 똑. 이번엔 조금 더 가깝다.', to: 'all' }] },
+      { id: 'knock2', on: 'time', elapsed: 35 * 60, do: [{ effect: 'flicker', to: 'all' }, { voice: '얘들아, 나 왔어. 문 열어 줘.', speaker: '어딘가에서 들리는 기지장의 목소리', to: 'all' }] },
+      { id: 'knock3', on: 'time', elapsed: 60 * 60, do: [{ narr: '모든 벽에서 동시에 노크 소리가 난다. 똑똑똑똑똑똑똑똑.', to: 'all' }] },
+      {
+        id: 'ai-lock', on: 'time', elapsed: 50 * 60, if: { notDone: 'core' },
+        do: [
+          { lock: 'dMess' },
+          { lock: 'dMed' },
+          { voice: '안전을 위해 일부 구역을 폐쇄합니다. 도킹 해치는 열려 있습니다.', speaker: '등대', to: 'all' },
+        ],
+      },
+      { id: 'ai-unlock', on: 'time', elapsed: 53 * 60, do: [{ release: 'dMess' }, { release: 'dMed' }, { narr: '어딘가에서 잠금이 풀리는 소리가 연달아 들린다.', to: 'corridor' }] },
+      {
+        id: 't15', on: 'time', left: 15 * 60,
+        do: [{ voice: '산소 잔량 15분. 구조선으로 이동하실 것을 강력히 권장합니다.', speaker: '등대', to: 'all' }, { effect: 'alarm', to: 'all' }],
+      },
+      { id: 't3', on: 'time', left: 3 * 60, do: [{ effect: 'blackout', to: 'all' }, { narr: '불이 모두 꺼졌다. 어둠 속에서, 누군가 바로 옆에서 숨을 쉰다.', to: 'all' }] },
+      {
+        id: 'idle', on: 'idle', seconds: 300, repeat: true,
+        do: [{ voice: '막히셨나요? 도킹 해치로 가시면 모든 것이 해결됩니다.', speaker: '등대', to: 'all' }, { hint: '세아의 메모' }],
+      },
+    ],
+  },
 ];
