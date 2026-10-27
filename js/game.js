@@ -1,5 +1,5 @@
 const CHAR_KEY = 'tge.characters';
-const SAVE_KEY = 'tge.save';
+const SAVE_KEY = 'tge.save.v2';
 const HINT_COST = 180;
 const WRONG_COST = 60;
 
@@ -18,6 +18,8 @@ function store(key, value) {
 function josa(word, withBatchim, without) {
   const code = String(word).charCodeAt(String(word).length - 1) - 0xac00;
   const has = code >= 0 && code <= 11171 && code % 28 !== 0;
+  // '(으)로'는 ㄹ 받침 뒤에서도 '로'
+  if (withBatchim === '으로' && code % 28 === 8) return word + without;
   return word + (has ? withBatchim : without);
 }
 
@@ -163,6 +165,7 @@ $('#pick-list').addEventListener('click', (e) => {
 /* ---------------- 게임 상태 ---------------- */
 let state = null;
 let scenario = null;
+let channel = null; // null이면 행동 중인 멤버의 구역을 따라간다. 'all'은 제작진 시점.
 
 $('#btn-new').addEventListener('click', () => show(characters.length ? 'setup' : 'chars'));
 $('#btn-chars').addEventListener('click', () => show('chars'));
@@ -173,20 +176,30 @@ $('#btn-continue').addEventListener('click', () => {
   enterGame();
 });
 
+const shuffle = (arr) => arr.map((v) => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+
 $('#btn-start').addEventListener('click', () => {
   scenario = SCENARIOS[epSelect.value];
-  const cast = characters.filter((c) => picked.has(c.id)).map((c) => ({ ...c }));
+  const cast = shuffle(characters.filter((c) => picked.has(c.id)).map((c) => ({ ...c })));
+  const starts = shuffle(scenario.starts);
+  const pos = {};
+  const inv = {};
+  cast.forEach((c, i) => { pos[c.id] = starts[i % starts.length]; inv[c.id] = []; });
   state = {
     scenarioId: scenario.id,
     cast,
     actor: cast[0].id,
-    room: scenario.start,
+    pos,
+    inv,
     solved: [],
-    items: [],
+    unlocked: [],
+    known: [...new Set(Object.values(pos))],
     timeLeft: scenario.timeLimit,
     log: [],
+    nextId: 1,
     over: false,
   };
+  channel = null;
   playIntro();
 });
 
@@ -195,13 +208,15 @@ function playIntro() {
   $('#intro-ep').textContent = scenario.title;
   const box = $('#intro-text');
   box.innerHTML = '';
+  const lines = [
+    ...scenario.intro.map(esc),
+    ...state.cast.map((c) => `${avatar(c, 'sm')} <b>${esc(c.name)}</b> — ${esc(room(state.pos[c.id]).name)}에서 눈을 떴다.`),
+  ];
   const next = () => {
-    if (i < scenario.intro.length) {
-      box.insertAdjacentHTML('beforeend', `<p>${esc(scenario.intro[i])}</p>`);
-      i++;
+    if (i < lines.length) {
+      box.insertAdjacentHTML('beforeend', `<p>${lines[i++]}</p>`);
     } else {
       $('#btn-intro-next').onclick = null;
-      scenario.intro.forEach((t) => addLog('narr', t));
       startGame();
     }
   };
@@ -211,8 +226,12 @@ function playIntro() {
 }
 
 function startGame() {
-  addLog('sys', `[${scenario.rooms[state.room].name}] 녹화 시작! 제한 시간 ${Math.floor(scenario.timeLimit / 60)}분.`);
-  for (const c of state.cast) addLog('say', voiceLine(c.personality, 'inspect'), c.id);
+  scenario.intro.forEach((t) => post({ type: 'narr', text: t, global: true }));
+  post({ type: 'sys', text: `녹화 시작! 제한 시간 ${Math.floor(scenario.timeLimit / 60)}분.`, global: true });
+  for (const c of state.cast) {
+    post({ type: 'narr', text: `${josa(c.name, '이', '가')} ${room(state.pos[c.id]).name}에서 눈을 떴다.`, room: state.pos[c.id] });
+    post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
+  }
   enterGame();
 }
 
@@ -223,9 +242,64 @@ function enterGame() {
   startTimer();
 }
 
-const isSolved = (id) => state.solved.includes(id);
+const room = (id) => scenario.rooms[id];
+const isDone = (id) => state.solved.includes(id) || state.unlocked.includes(id);
 const actor = () => charById(state.actor);
+const here = () => state.pos[state.actor];
+const membersIn = (roomId) => state.cast.filter((c) => state.pos[c.id] === roomId);
 const save = () => store(SAVE_KEY, state.over ? null : state);
+const objDone = (o) => state.solved.includes(o.id) ||
+  (o.onSolve?.unlock && !o.onSolve.item && state.unlocked.includes(o.onSolve.unlock));
+const linkOpen = (l) => l.kind === 'open' || (l.kind === 'door' && (!l.locked || state.unlocked.includes(l.id)));
+const linksOf = (roomId) => scenario.links.filter((l) => l.a === roomId || l.b === roomId);
+const other = (l, roomId) => (l.a === roomId ? l.b : l.a);
+
+/* ---------------- 소리 전달 ---------------- */
+// 속삭임: 같은 구역만 / 대사: 옆 구역 웅얼 / 외침: 옆 구역 또렷, 두 칸 웅얼
+const RANGE = {
+  whisper: { clear: 0, muffled: 0 },
+  say: { clear: 0, muffled: 1 },
+  shout: { clear: 1, muffled: 2 },
+};
+const VOLUME_DESC = {
+  whisper: '같은 구역에만 들립니다.',
+  say: '같은 구역에 들리고, 문·벽 너머 옆 구역에는 웅얼거리며 들립니다.',
+  shout: '옆 구역까지 또렷하게, 두 칸 떨어진 구역에는 웅얼거리며 들립니다.',
+  act: '같은 구역의 멤버만 볼 수 있습니다.',
+  narr: '지금 보고 있는 채널에 나레이션을 남깁니다.',
+};
+
+function hopsFrom(start) {
+  const dist = { [start]: 0 };
+  const queue = [start];
+  while (queue.length) {
+    const cur = queue.shift();
+    for (const l of linksOf(cur)) {
+      const nb = other(l, cur);
+      if (dist[nb] === undefined) { dist[nb] = dist[cur] + 1; queue.push(nb); }
+    }
+  }
+  return dist;
+}
+function hearing(roomId, vol) {
+  const range = RANGE[vol] || RANGE.whisper;
+  const hear = {};
+  for (const [r, d] of Object.entries(hopsFrom(roomId))) {
+    if (d <= range.clear) hear[r] = 'clear';
+    else if (d <= range.muffled) hear[r] = 'muffled';
+  }
+  return hear;
+}
+
+// 웅얼거리는 소리: 메시지 id로 고정된 무작위로 글자를 지운다
+function garble(text, seed) {
+  let h = seed * 2654435761;
+  return [...text].map((ch) => {
+    if (/\s/.test(ch)) return ch;
+    h = (h ^ (h >>> 13)) * 1274126177 >>> 0;
+    return h % 100 < 45 ? ch : '·';
+  }).join('').replace(/·{2,}/g, '…');
+}
 
 /* ---------------- 타이머 ---------------- */
 let timerId = null;
@@ -251,144 +325,333 @@ function renderTimer() {
   el.classList.toggle('danger', t <= 300);
 }
 
-/* ---------------- 로그 ---------------- */
-function addLog(type, text, charId) {
+/* ---------------- 메시지 ---------------- */
+// type: say(말) / act(행동) / narr(나레이션) / sys(시스템)
+// 말은 vol(속삭임·대사·외침)에 따라 퍼지고, 나머지는 같은 구역에만 남는다.
+function post({ type, text, charId, room: roomId, vol, global }) {
   if (!text) return;
-  state.log.push({ type, text, charId });
-  appendLogEntry(state.log[state.log.length - 1]);
+  const r = roomId || (charId && state.pos[charId]);
+  const m = { id: state.nextId++, type, text, charId, room: r };
+  if (global) m.global = true;
+  else m.hear = hearing(r, type === 'say' ? (vol || 'say') : 'whisper');
+  if (type === 'say' && vol && vol !== 'say') m.vol = vol;
+  state.log.push(m);
+  if (visibleIn(m, currentChannel())) appendMsg(m);
+  renderChannels();
   save();
 }
-function appendLogEntry(entry) {
+const currentChannel = () => channel || here();
+const visibleIn = (m, ch) => ch === 'all' || m.global || !!m.hear?.[ch];
+
+function appendMsg(m) {
   const log = $('#log');
-  const c = entry.charId && charById(entry.charId);
+  const ch = currentChannel();
+  const c = m.charId && charById(m.charId);
+  const muffled = ch !== 'all' && !m.global && m.hear[ch] === 'muffled';
+  const away = ch !== 'all' && !m.global && m.room !== ch;
+  const where = room(m.room)?.name;
+  const tag = ch === 'all' && !m.global ? `<span class="tag">${esc(where)}</span>` : '';
   let html;
-  if (entry.type === 'say' && c) {
-    html = `<div class="msg say">${avatar(c, 'sm')}<div><b style="color:${esc(c.color)}">${esc(c.name)}</b><p>${esc(entry.text)}</p></div></div>`;
-  } else if (entry.type === 'act' && c) {
-    html = `<div class="msg act"><i>* ${esc(josa(c.name, '이', '가'))} ${esc(entry.text)}</i></div>`;
+  if (muffled) {
+    const from = state.known.includes(m.room) ? `${where} 쪽` : '어딘가';
+    html = `<div class="msg muffled"><span class="from">🔇 ${esc(from)}에서 웅얼거리는 소리</span><p>${esc(garble(m.text, m.id))}</p></div>`;
+  } else if (m.type === 'say' && c) {
+    const vol = m.vol === 'shout' ? ' shout' : m.vol === 'whisper' ? ' whisper' : '';
+    const from = away ? `<span class="from">${esc(where)}에서</span>` : '';
+    html = `<div class="msg say${vol}">${avatar(c, 'sm')}<div>${tag}<b style="color:${esc(c.color)}">${esc(c.name)}</b>${from}<p>${esc(m.text)}</p></div></div>`;
+  } else if (m.type === 'act' && c) {
+    html = `<div class="msg act">${tag}<i>* ${esc(josa(c.name, '이', '가'))} ${esc(m.text)}</i></div>`;
   } else {
-    html = `<div class="msg ${entry.type}">${esc(entry.text)}</div>`;
+    html = `<div class="msg ${m.type}">${tag}${esc(m.text)}</div>`;
   }
   log.insertAdjacentHTML('beforeend', html);
   log.scrollTop = log.scrollHeight;
 }
+
+function renderLog() {
+  $('#log').innerHTML = '';
+  const ch = currentChannel();
+  state.log.filter((m) => visibleIn(m, ch)).forEach(appendMsg);
+}
+
+function renderChannels() {
+  const rooms = [...new Set(state.cast.map((c) => state.pos[c.id]))];
+  const ch = currentChannel();
+  $('#channels').innerHTML = rooms.map((r) => {
+    const n = membersIn(r).length;
+    return `<button data-ch="${r}" class="${ch === r ? 'on' : ''}">${r === here() ? '📍' : ''}${esc(room(r).name)} <small>${n}</small></button>`;
+  }).join('') + `<button data-ch="all" class="${ch === 'all' ? 'on' : ''}">🎬 제작진</button>`;
+}
+$('#channels').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-ch]');
+  if (!b) return;
+  channel = b.dataset.ch === here() ? null : b.dataset.ch;
+  renderChannels();
+  renderLog();
+  renderInput();
+});
+
 function logAsText() {
-  const lines = [`${scenario.title}`, `출연: ${state.cast.map((c) => c.name).join(', ')}`, ''];
-  for (const e of state.log) {
-    const c = e.charId && charById(e.charId);
-    if (e.type === 'say' && c) lines.push(`${c.name}: "${e.text}"`);
-    else if (e.type === 'act' && c) lines.push(`* ${josa(c.name, '이', '가')} ${e.text}`);
-    else if (e.type === 'sys') lines.push(`[${e.text}]`);
-    else lines.push(e.text);
+  const lines = [scenario.title, `출연: ${state.cast.map((c) => c.name).join(', ')}`, ''];
+  for (const m of state.log) {
+    const c = m.charId && charById(m.charId);
+    const where = m.global ? '' : `[${room(m.room).name}] `;
+    if (m.type === 'say' && c) lines.push(`${where}${c.name}${m.vol === 'shout' ? '(외침)' : m.vol === 'whisper' ? '(속삭임)' : ''}: "${m.text}"`);
+    else if (m.type === 'act' && c) lines.push(`${where}* ${josa(c.name, '이', '가')} ${m.text}`);
+    else if (m.type === 'sys') lines.push(`${where}<${m.text}>`);
+    else lines.push(`${where}${m.text}`);
   }
   return lines.join('\n');
 }
 
 /* ---------------- 렌더 ---------------- */
 function renderAll() {
-  const room = scenario.rooms[state.room];
-  $('#room-name').textContent = room.name;
-  $('#room-desc').textContent = room.desc;
   renderTimer();
   renderTeam();
-  renderObjects();
-  renderInventory();
-  $('#log').innerHTML = '';
-  state.log.forEach(appendLogEntry);
-  $('#rp-speaker').innerHTML = '<option value="">나레이션</option>' +
-    state.cast.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
-  $('#rp-speaker').value = state.actor;
-}
-function renderTeam() {
-  $('#team').innerHTML = '<h4>행동할 멤버</h4>' + state.cast.map((c) => `
-    <button class="member ${c.id === state.actor ? 'on' : ''}" data-actor="${c.id}" title="${esc(c.intro)}">
-      ${avatar(c)}
-      <span><b>${esc(c.name)}</b><small>${SKILLS[c.skill]?.label}</small></span>
-    </button>`).join('');
-}
-function renderObjects() {
-  const room = scenario.rooms[state.room];
-  $('#objects').innerHTML = room.objects
-    .filter((o) => !o.showIf || isSolved(o.showIf))
-    .map((o) => `
-      <button class="obj ${isSolved(o.id) ? 'solved' : ''} ${o.goto && !o.onSolve ? 'exit' : ''}" data-obj="${o.id}">
-        <span class="icon">${o.icon}</span><span>${esc(o.name)}</span>
-      </button>`).join('');
-}
-function renderInventory() {
-  $('#inventory').innerHTML = state.items.map((id) => {
-    const it = scenario.items[id];
-    return `<span class="item">${it.icon} ${esc(it.name)}</span>`;
-  }).join('') || '<span class="muted">없음</span>';
+  renderMap();
+  renderRoom();
+  renderChannels();
+  renderLog();
+  renderInput();
 }
 
-$('#team').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-actor]');
-  if (!b) return;
-  state.actor = b.dataset.actor;
-  $('#rp-speaker').value = state.actor;
+function renderTeam() {
+  $('#team').innerHTML = state.cast.map((c) => {
+    const items = state.inv[c.id].map((id) => {
+      const it = scenario.items[id];
+      return `<button class="item" data-give="${id}" data-owner="${c.id}" title="건네주기">${it.icon} ${esc(it.name)}</button>`;
+    }).join('');
+    return `
+    <div class="member ${c.id === state.actor ? 'on' : ''}" data-actor="${c.id}" title="${esc(c.intro)}">
+      ${avatar(c)}
+      <div class="m-info">
+        <b>${esc(c.name)}</b>
+        <small>📍 ${esc(room(state.pos[c.id]).name)} · ${SKILLS[c.skill]?.label}</small>
+        <div class="m-items">${items}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function visibleRooms() {
+  const vis = {};
+  for (const r of state.known) vis[r] = 'known';
+  for (const r of state.known) {
+    for (const l of linksOf(r)) {
+      const nb = other(l, r);
+      if (!vis[nb]) vis[nb] = 'unknown';
+    }
+  }
+  return vis;
+}
+
+function linkPoint(l) {
+  if (l.at) return l.at;
+  const [ax, ay, aw, ah] = room(l.a).rect;
+  const [bx, by, bw, bh] = room(l.b).rect;
+  if (ax + aw === bx || bx + bw === ax) {
+    const x = ax + aw === bx ? bx : ax;
+    return [x, (Math.max(ay, by) + Math.min(ay + ah, by + bh)) / 2];
+  }
+  const y = ay + ah === by ? by : ay;
+  return [(Math.max(ax, bx) + Math.min(ax + aw, bx + bw)) / 2, y];
+}
+
+function renderMap() {
+  const { w, h } = scenario.map;
+  const vis = visibleRooms();
+  const pct = (v, total) => `${(v / total) * 100}%`;
+  let html = '';
+  for (const [id, r] of Object.entries(scenario.rooms)) {
+    if (!vis[id]) continue;
+    const [x, y, rw, rh] = r.rect;
+    const style = `left:${pct(x, w)};top:${pct(y, h)};width:${pct(rw, w)};height:${pct(rh, h)}`;
+    if (vis[id] === 'unknown') {
+      html += `<div class="room unknown" style="${style}" data-room="${id}"><span>???</span></div>`;
+      continue;
+    }
+    const tokens = membersIn(id).map((c) =>
+      `<span class="token ${c.id === state.actor ? 'on' : ''}" data-actor="${c.id}" title="${esc(c.name)}">${avatar(c, 'sm')}</span>`).join('');
+    html += `<div class="room ${id === here() ? 'here' : ''}" style="${style}" data-room="${id}">
+      <span class="room-label">${esc(r.name)}</span><div class="tokens">${tokens}</div></div>`;
+  }
+  for (const l of scenario.links) {
+    if (l.kind === 'wall' || !vis[l.a] || !vis[l.b]) continue;
+    const [x, y] = linkPoint(l);
+    const icon = l.kind === 'open' ? '' : linkOpen(l) ? '🚪' : '🔒';
+    html += `<span class="link ${l.kind} ${linkOpen(l) ? 'open' : 'locked'}" style="left:${pct(x, w)};top:${pct(y, h)}">${icon}</span>`;
+  }
+  const map = $('#map');
+  map.style.aspectRatio = `${w} / ${h}`;
+  map.style.width = `min(100%, calc(52vh * ${w / h}))`;
+  map.style.setProperty('--gw', w);
+  map.style.setProperty('--gh', h);
+  map.innerHTML = html;
+}
+
+function renderRoom() {
+  const id = here();
+  const r = room(id);
+  $('#room-name').textContent = `📍 ${r.name}`;
+  const others = membersIn(id).filter((c) => c.id !== state.actor).map((c) => c.name);
+  $('#room-people').textContent = others.length ? `함께 있는 멤버: ${others.join(', ')}` : '이 구역엔 혼자다';
+  $('#room-desc').textContent = r.desc;
+  $('#objects').innerHTML = r.objects.map((o) => `
+    <button class="obj ${objDone(o) ? 'solved' : ''}" data-obj="${o.id}">
+      <span class="icon">${o.icon}</span><span>${esc(o.name)}</span>
+    </button>`).join('');
+  $('#exits').innerHTML = linksOf(id).filter((l) => l.kind !== 'wall').map((l) => {
+    const to = other(l, id);
+    const name = state.known.includes(to) ? room(to).name : '???';
+    return `<button class="exit ${linkOpen(l) ? '' : 'locked'}" data-room="${to}">${linkOpen(l) ? '→' : '🔒'} ${esc(name)}</button>`;
+  }).join('');
+}
+
+function renderInput() {
+  const c = actor();
+  const mode = $('#rp-mode').value;
+  const ch = currentChannel();
+  const spot = mode === 'narr' ? (ch === 'all' ? '전체' : room(ch).name) : room(here()).name;
+  $('#rp-who').innerHTML = mode === 'narr'
+    ? `📖 나레이션 → <b>${esc(spot)}</b>`
+    : `${avatar(c, 'sm')} <b style="color:${esc(c.color)}">${esc(c.name)}</b> <span class="muted">@ ${esc(spot)}</span>`;
+  $('#rp-range').textContent = VOLUME_DESC[mode];
+}
+$('#rp-mode').addEventListener('change', renderInput);
+
+function selectActor(id) {
+  if (!state.cast.some((c) => c.id === id)) return;
+  state.actor = id;
+  channel = null;
   renderTeam();
+  renderMap();
+  renderRoom();
+  renderChannels();
+  renderLog();
+  renderInput();
   save();
+}
+document.querySelector('#screen-game').addEventListener('click', (e) => {
+  if (state?.over) return;
+  const give = e.target.closest('[data-give]');
+  if (give) return openGive(give.dataset.owner, give.dataset.give);
+  const a = e.target.closest('[data-actor]');
+  if (a) return selectActor(a.dataset.actor);
+  const r = e.target.closest('[data-room]');
+  if (r) return tryMove(r.dataset.room);
+  const o = e.target.closest('[data-obj]');
+  if (o) return interact(room(here()).objects.find((x) => x.id === o.dataset.obj));
 });
+
+/* ---------------- 이동 ---------------- */
+function tryMove(to) {
+  const from = here();
+  if (to === from) return;
+  const c = actor();
+  const link = linksOf(from).find((l) => other(l, from) === to && l.kind !== 'wall');
+  if (!link) {
+    post({ type: 'sys', text: `${c.name}의 위치(${room(from).name})에서 바로 갈 수 없는 곳이다.`, room: from });
+    return;
+  }
+  if (!linkOpen(link)) {
+    post({ type: 'act', text: '문을 밀어 보지만 꿈쩍도 하지 않는다.', charId: c.id });
+    post({ type: 'say', text: voiceLine(c.personality, 'blocked'), charId: c.id });
+    return;
+  }
+  post({ type: 'act', text: `${josa(state.known.includes(to) ? room(to).name : '저편', '으로', '로')} 나간다.`, charId: c.id });
+  state.pos[c.id] = to;
+  const first = !state.known.includes(to);
+  if (first) state.known.push(to);
+  channel = null;
+  post({ type: 'act', text: '들어왔다.', charId: c.id });
+  if (first) {
+    post({ type: 'narr', text: room(to).desc, room: to });
+    post({ type: 'say', text: voiceLine(c.personality, 'move'), charId: c.id });
+  }
+  const met = membersIn(to).filter((m) => m.id !== c.id);
+  if (met.length) post({ type: 'sys', text: `${josa(met.map((m) => m.name).join(', '), '과', '와')} 합류했다!`, room: to });
+  renderAll();
+}
 
 /* ---------------- 상호작용 ---------------- */
-$('#objects').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-obj]');
-  if (!b || state.over) return;
-  interact(scenario.rooms[state.room].objects.find((o) => o.id === b.dataset.obj));
-});
+const hasItem = (charId, item) => state.inv[charId].includes(item);
 
 function interact(obj) {
   const c = actor();
-  const isPuzzle = obj.lock || obj.needItem || obj.needSolved || obj.onSolve;
+  post({ type: 'act', text: `${josa(obj.name, '을', '를')} 살펴본다.`, charId: c.id });
+  if (objDone(obj)) return post({ type: 'narr', text: obj.solvedDesc || '이미 해결했다.', room: here() });
+  post({ type: 'narr', text: obj.desc, room: here() });
+  if (obj.bonus && c.skill === 'observe') post({ type: 'sys', text: `🔍 관찰력 — ${obj.bonus}`, room: here() });
 
-  if (obj.goto && (!isPuzzle || isSolved(obj.id))) return moveTo(obj.goto);
-
-  addLog('act', `${josa(obj.name, '을', '를')} 살펴본다.`, c.id);
-  if (isSolved(obj.id)) return addLog('narr', obj.solvedDesc || obj.desc);
-  addLog('narr', obj.desc);
-  if (obj.bonus && c.skill === 'observe') addLog('sys', `🔍 관찰력 — ${obj.bonus}`);
-
-  if ((obj.needItem && !state.items.includes(obj.needItem)) || (obj.needSolved && !isSolved(obj.needSolved))) {
-    addLog('narr', obj.lackText);
-    addLog('say', voiceLine(c.personality, 'blocked'), c.id);
-    return;
+  if (obj.cctv) {
+    const lines = state.cast.map((m) => `${m.name}: ${room(state.pos[m.id]).name}`).join(' / ');
+    post({ type: 'sys', text: `📺 ${lines}`, room: here() });
+    state.cast.forEach((m) => { if (!state.known.includes(state.pos[m.id])) state.known.push(state.pos[m.id]); });
+    renderMap();
+    return post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
   }
-  if (obj.needItem) addLog('sys', `${scenario.items[obj.needItem].icon} ${josa(scenario.items[obj.needItem].name, '을', '를')} 사용했다.`);
+  if (obj.needItem && !hasItem(c.id, obj.needItem)) {
+    post({ type: 'narr', text: obj.lackText, room: here() });
+    return post({ type: 'say', text: voiceLine(c.personality, 'blocked'), charId: c.id });
+  }
+  if (obj.needAll) {
+    const missing = state.cast.filter((m) => state.pos[m.id] !== here());
+    if (missing.length) {
+      post({ type: 'sys', text: `전원 탑승 확인 실패 — 아직 ${josa(missing.map((m) => m.name).join(', '), '이', '가')} 오지 않았다.`, room: here() });
+      return post({ type: 'say', text: voiceLine(c.personality, 'blocked'), charId: c.id });
+    }
+  }
+  if (obj.needItem) {
+    const it = scenario.items[obj.needItem];
+    post({ type: 'sys', text: `${it.icon} ${josa(it.name, '을', '를')} 사용했다.`, room: here() });
+  }
   if (obj.lock) return openLock(obj);
   if (obj.onSolve) return solve(obj);
-  addLog('say', voiceLine(c.personality, 'inspect'), c.id);
+  post({ type: 'say', text: voiceLine(c.personality, 'inspect'), charId: c.id });
 }
 
 function solve(obj) {
   const c = actor();
   const r = obj.onSolve;
   state.solved.push(obj.id);
-  if (obj.needItem) state.items = state.items.filter((i) => i !== obj.needItem);
-  addLog('narr', r.text);
+  if (obj.needItem) state.inv[c.id] = state.inv[c.id].filter((i) => i !== obj.needItem);
+  post({ type: 'narr', text: r.text, room: here() });
+  if (r.unlock && !state.unlocked.includes(r.unlock)) state.unlocked.push(r.unlock);
   if (r.item) {
-    state.items.push(r.item);
+    state.inv[c.id].push(r.item);
     const it = scenario.items[r.item];
-    addLog('sys', `${it.icon} ${josa(it.name, '을', '를')} 얻었다!`);
-    addLog('say', voiceLine(c.personality, 'item'), c.id);
+    post({ type: 'sys', text: `${it.icon} ${c.name} — ${josa(it.name, '을', '를')} 얻었다!`, room: here() });
+    post({ type: 'say', text: voiceLine(c.personality, 'item'), charId: c.id });
   } else {
-    addLog('say', voiceLine(c.personality, 'success'), c.id);
+    post({ type: 'say', text: voiceLine(c.personality, 'success'), charId: c.id });
   }
-  renderObjects();
-  renderInventory();
-  if (r.ending) return endGame(true);
-  if (r.goto) moveTo(r.goto);
+  renderTeam();
+  renderMap();
+  renderRoom();
+  if (r.ending) endGame(true);
 }
 
-function moveTo(roomId) {
-  state.room = roomId;
-  const room = scenario.rooms[roomId];
-  addLog('sys', `— ${room.name} —`);
-  addLog('say', voiceLine(actor().personality, 'move'), state.actor);
-  $('#room-name').textContent = room.name;
-  $('#room-desc').textContent = room.desc;
-  renderObjects();
-  save();
+/* ---------------- 아이템 건네기 ---------------- */
+const giveDlg = $('#give-dialog');
+function openGive(ownerId, item) {
+  const owner = charById(ownerId);
+  const it = scenario.items[item];
+  const mates = membersIn(state.pos[ownerId]).filter((m) => m.id !== ownerId);
+  $('#give-title').textContent = `${it.icon} ${josa(it.name, '을', '를')} 누구에게 건넬까?`;
+  $('#give-targets').innerHTML = mates.length
+    ? mates.map((m) => `<button value="${m.id}" data-to="${m.id}">${avatar(m, 'sm')} ${esc(m.name)}</button>`).join('')
+    : `<p class="muted">${esc(josa(owner.name, '과', '와'))} 같은 구역에 있는 멤버가 없다. 같은 구역에 있어야 건넬 수 있다.</p>`;
+  $('#give-targets').onclick = (e) => {
+    const b = e.target.closest('[data-to]');
+    if (!b) return;
+    const to = charById(b.dataset.to);
+    state.inv[ownerId] = state.inv[ownerId].filter((i) => i !== item);
+    state.inv[to.id].push(item);
+    post({ type: 'act', text: `${to.name}에게 ${josa(it.name, '을', '를')} 건넨다.`, charId: ownerId });
+    giveDlg.close();
+    renderTeam();
+  };
+  giveDlg.showModal();
 }
 
 /* ---------------- 자물쇠 ---------------- */
@@ -412,41 +675,46 @@ $('#lock-form').addEventListener('submit', (e) => {
   const c = actor();
   const guess = $('#lock-input').value.trim();
   if (!guess) return;
-  addLog('act', `${obj.name}에 "${guess}" 입력!`, c.id);
+  post({ type: 'act', text: `${obj.name}에 "${guess}" 입력!`, charId: c.id });
   if (guess.toUpperCase() === obj.lock.answer.toUpperCase()) {
     solve(obj);
   } else {
-    addLog('narr', '삐빅— 틀렸다.');
-    addLog('say', voiceLine(c.personality, 'fail'), c.id);
-    if (c.skill === 'luck') addLog('sys', `🍀 ${c.name}의 행운 — 시간이 줄지 않았다.`);
-    else { addLog('sys', `⏱ 오답! -${WRONG_COST / 60}분`); spendTime(WRONG_COST); }
+    post({ type: 'narr', text: '삐빅— 틀렸다.', room: here() });
+    post({ type: 'say', text: voiceLine(c.personality, 'fail'), charId: c.id });
+    if (c.skill === 'luck') post({ type: 'sys', text: `🍀 ${c.name}의 행운 — 시간이 줄지 않았다.`, room: here() });
+    else { post({ type: 'sys', text: `⏱ 오답! -${WRONG_COST / 60}분`, global: true }); spendTime(WRONG_COST); }
   }
 });
 $('#lock-force').addEventListener('click', () => {
   const c = actor();
   dlg.close();
-  addLog('act', `${josa(lockObj.name, '을', '를')} 힘으로 비틀어 연다!`, c.id);
-  addLog('sys', `💪 ${c.name}의 괴력 발동!`);
+  post({ type: 'act', text: `${josa(lockObj.name, '을', '를')} 힘으로 비틀어 연다!`, charId: c.id });
+  post({ type: 'sys', text: `💪 ${c.name}의 괴력 발동!`, room: here() });
   solve(lockObj);
 });
 
 /* ---------------- 힌트 / 역극 입력 / 종료 ---------------- */
 $('#btn-hint').addEventListener('click', () => {
   if (state.over) return;
-  const h = scenario.hints.find((x) => !isSolved(x.until));
+  const h = scenario.hints.find((x) => !isDone(x.until));
   if (!h) return;
-  addLog('sys', `💡 힌트: ${h.text}`);
-  addLog('sys', `⏱ -${HINT_COST / 60}분`);
+  post({ type: 'sys', text: `💡 힌트: ${h.text} (-${HINT_COST / 60}분)`, global: true });
   spendTime(HINT_COST);
 });
 
 $('#rp-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const text = $('#rp-text').value.trim();
-  if (!text) return;
-  const speaker = $('#rp-speaker').value;
-  if (!speaker) addLog('narr', text);
-  else addLog($('#rp-mode').value, text, speaker);
+  if (!text || state.over) return;
+  const mode = $('#rp-mode').value;
+  if (mode === 'narr') {
+    const ch = currentChannel();
+    post(ch === 'all' ? { type: 'narr', text, global: true } : { type: 'narr', text, room: ch });
+  } else if (mode === 'act') {
+    post({ type: 'act', text, charId: state.actor });
+  } else {
+    post({ type: 'say', text, charId: state.actor, vol: mode });
+  }
   $('#rp-text').value = '';
 });
 
@@ -458,11 +726,11 @@ function endGame(success) {
   if (state.over) return;
   stopTimer();
   if (success) {
-    for (const c of state.cast) addLog('say', voiceLine(c.personality, 'escape'), c.id);
+    for (const c of state.cast) post({ type: 'say', text: voiceLine(c.personality, 'escape'), charId: c.id });
     const used = scenario.timeLimit - state.timeLeft;
-    addLog('sys', `탈출 성공! 소요 시간 ${Math.floor(used / 60)}분 ${used % 60}초`);
+    post({ type: 'sys', text: `탈출 성공! 소요 시간 ${Math.floor(used / 60)}분 ${used % 60}초`, global: true });
   } else {
-    addLog('sys', '시간 초과. 시설이 완전히 봉쇄되었다…');
+    post({ type: 'sys', text: '시간 초과. 시설이 완전히 봉쇄되었다…', global: true });
   }
   state.over = true;
   save();
