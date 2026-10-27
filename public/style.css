@@ -7,22 +7,22 @@
 
 :root {
   --px: 3px;
-  --bg: #090a09;
-  --panel: #121411;
-  --panel-2: #1a1d19;
-  --panel-3: #232720;
-  --line: #2e322b;
-  --frame: #4d473b;      /* 녹슨 쇠 */
-  --text: #b3ad99;       /* 바랜 뼛빛 */
-  --text-dim: #8a8574;
-  --muted: #5f6157;
-  --accent: #a8963f;     /* 꺼져 가는 형광등 */
-  --accent-hi: #c9b453;
-  --accent-dark: #4f461c;
+  --bg: #0e100e;
+  --panel: #181b17;
+  --panel-2: #21251f;
+  --panel-3: #2b3029;
+  --line: #3a3f37;
+  --frame: #615a4a;      /* 녹슨 쇠 */
+  --text: #d6cfb9;       /* 바랜 뼛빛 */
+  --text-dim: #b0aa95;
+  --muted: #86887c;
+  --accent: #c4ae4c;     /* 꺼져 가는 형광등 */
+  --accent-hi: #ddc865;
+  --accent-dark: #5e5322;
   --blood: #6e221c;
   --danger: #a3362b;
   --ok: #56703f;
-  --paper: #8f8468;      /* 얼룩진 종이 */
+  --paper: #b3a682;      /* 얼룩진 종이 */
   --ink: #17120d;
   --shadow: #030303;
   --font: "Galmuri11", "Apple SD Gothic Neo", "Noto Sans KR", monospace;
@@ -49,7 +49,7 @@ body {
 /* 비네팅 + 깜빡이는 형광등 */
 body::before {
   content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 99;
-  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, .78) 100%);
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .45) 100%);
   animation: flicker 7s steps(1) infinite;
 }
 /* 주사선 + 필름 그레인 */
@@ -58,16 +58,16 @@ body::after {
   background:
     repeating-linear-gradient(transparent 0 2px, rgba(0, 0, 0, .22) 2px 3px),
     var(--grain);
-  opacity: .55;
+  opacity: .3;
   mix-blend-mode: multiply;
 }
 @keyframes flicker {
   0%, 100% { background-color: transparent; }
-  41% { background-color: rgba(0, 0, 0, .2); }
+  41% { background-color: rgba(0, 0, 0, .12); }
   42% { background-color: transparent; }
-  43% { background-color: rgba(0, 0, 0, .3); }
+  43% { background-color: rgba(0, 0, 0, .18); }
   44% { background-color: transparent; }
-  78% { background-color: rgba(0, 0, 0, .15); }
+  78% { background-color: rgba(0, 0, 0, .1); }
   79% { background-color: transparent; }
 }
 @keyframes blink { 50% { opacity: 0; } }
@@ -260,7 +260,7 @@ label > input, label > select, label > textarea { margin-top: 6px; color: var(--
 }
 .map::after {
   content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0, 0, 0, .55) 100%);
+  background: radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, .3) 100%);
 }
 .room {
   position: absolute; padding: 4px; cursor: pointer;
@@ -273,7 +273,7 @@ label > input, label > select, label > textarea { margin-top: 6px; color: var(--
   background-size: 16px 16px; background-position: 0 0, 8px 8px;
   border: var(--px) solid #34372f;
   outline: var(--px) solid #050605; outline-offset: calc(-2 * var(--px) - 1px);
-  filter: brightness(.8);
+  filter: brightness(.95);
 }
 .room:hover { border-color: var(--frame); filter: brightness(1); }
 /* 지금 위치: 꺼질 듯한 형광등 아래 */
@@ -495,6 +495,10 @@ html.no-fx #fx { display: none; }
 }
 .resume-info b { color: var(--text); letter-spacing: .1em; }
 #resume-code, #resume-pin { text-transform: uppercase; letter-spacing: .2em; text-align: center; }
+
+.room-options { margin-top: 16px; }
+.room-options .check { margin: 0; }
+.room-options p { margin: 4px 0 0; }
 
 /* ===== 모바일 탭 ===== */
 .mobile-tabs { display: none; }
